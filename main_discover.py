@@ -267,6 +267,7 @@ def main(args):
     model = Discoverer(**args.__dict__)
     trainer = pl.Trainer.from_argparse_args(args, logger=wandb_logger)
     trainer.fit(model, dm)
+    torch.save(model,'final_model.pth')
 
 
 if __name__ == "__main__":

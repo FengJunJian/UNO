@@ -13,7 +13,7 @@ from utils.sinkhorn_knopp import SinkhornKnopp
 import numpy as np
 from argparse import ArgumentParser
 from datetime import datetime
-
+from tqdm import tqdm
 
 parser = ArgumentParser()
 parser.add_argument("--dataset", default="CIFAR100", type=str, help="dataset")
@@ -47,6 +47,8 @@ parser.add_argument("--num_unlabeled_classes", default=20, type=int, help="numbe
 #parser.add_argument("--pretrained", default='checkpoints/pretrain-resnet18-CIFAR100-Sep16_17-27-49.cp',type=str, help="pretrained checkpoint path")
 parser.add_argument("--pretrained", default='checkpoints/epoch=250-step=48944.ckpt',type=str, help="pretrained checkpoint path")
 #parser.add_argument("--gpus",default=1,type=int,help="number of gpus")
+
+class_names=[b'apple', b'aquarium_fish', b'baby', b'bear', b'beaver', b'bed', b'bee', b'beetle', b'bicycle', b'bottle', b'bowl', b'boy', b'bridge', b'bus', b'butterfly', b'camel', b'can', b'castle', b'caterpillar', b'cattle', b'chair', b'chimpanzee', b'clock', b'cloud', b'cockroach', b'couch', b'crab', b'crocodile', b'cup', b'dinosaur', b'dolphin', b'elephant', b'flatfish', b'forest', b'fox', b'girl', b'hamster', b'house', b'kangaroo', b'keyboard', b'lamp', b'lawn_mower', b'leopard', b'lion', b'lizard', b'lobster', b'man', b'maple_tree', b'motorcycle', b'mountain', b'mouse', b'mushroom', b'oak_tree', b'orange', b'orchid', b'otter', b'palm_tree', b'pear', b'pickup_truck', b'pine_tree', b'plain', b'plate', b'poppy', b'porcupine', b'possum', b'rabbit', b'raccoon', b'ray', b'road', b'rocket', b'rose', b'sea', b'seal', b'shark', b'shrew', b'skunk', b'skyscraper', b'snail', b'snake', b'spider', b'squirrel', b'streetcar', b'sunflower', b'sweet_pepper', b'table', b'tank', b'telephone', b'television', b'tiger', b'tractor', b'train', b'trout', b'tulip', b'turtle', b'wardrobe', b'whale', b'willow_tree', b'wolf', b'woman', b'worm']
 
 class Discoverer(pl.LightningModule):
     def __init__(self, **kwargs):
@@ -251,22 +253,49 @@ class Discoverer(pl.LightningModule):
                 self.log(prefix + "/acc", result)
                 self.log(prefix_inc + "/acc", result_inc)
 
+def project(features,targets=None):
+    from sklearn.manifold import TSNE
+    import pandas as pd
+    import seaborn as sns
+    #sns.set(rc={'figure.figsize': (11.7, 8.27)})
+    #palette = sns.color_palette("bright", 80)
+    tsne = TSNE()
+
+    x_embedded=tsne.fit_transform(features)  # 进行数据降维,降成两维
+    # a=tsne.fit_transform(data_zs) #a是一个array,a相当于下面的tsne_embedding_
+    sns.scatterplot(x_embedded[:, 0], x_embedded[:, 1], hue=targets, legend='full', )#palette=palette
+
 
 def main(args):
     dm = get_datamodule(args, "discover")
-
+    dm.setup()
+    dataloader=dm.train_dataloader()
     run_name = "-".join(["discover", args.arch, args.dataset, args.comment])
-    wandb_logger = pl.loggers.WandbLogger(
-        save_dir=args.log_dir,
-        name=run_name,
-        project=args.project,
-        entity=args.entity,
-        offline=args.offline,
-    )
+    # wandb_logger = pl.loggers.WandbLogger(
+    #     save_dir=args.log_dir,
+    #     name=run_name,
+    #     project=args.project,
+    #     entity=args.entity,
+    #     offline=args.offline,
+    # )
 
     model = Discoverer(**args.__dict__)
-    trainer = pl.Trainer.from_argparse_args(args, logger=wandb_logger)
-    trainer.fit(model, dm)
+    state_dict = torch.load('checkpoints/epoch=250-step=48944.ckpt')
+    #'checkpoints/epoch=250-step=48944.ckpt'
+    #'checkpoints/pretrain-resnet18-CIFAR100-Sep16_17-27-49.cp'
+    #torch.load(args.pretrained)
+    state_dict = {k: v for k, v in state_dict.items() if ("unlab" not in k)}
+    model.load_state_dict(state_dict, strict=False)
+    #model.load_state_dict(torch.load(args.pretrained))
+    #torch.save(model,'test.pth')
+    for i,datas,targets in enumerate(tqdm(dataloader)):
+        result=model(datas)
+        f=result['feats'][0].detach().numpy()
+        t=targets.numpy()
+        #keys: 'feats', 'logits_lab', 'logits_unlab', 'proj_feats_unlab', 'logits_unlab_over', 'proj_feats_unlab_over'
+
+    #trainer = pl.Trainer.from_argparse_args(args, logger=wandb_logger)
+    #trainer.fit(model, dm)
 
 
 if __name__ == "__main__":
