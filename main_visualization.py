@@ -273,5 +273,5 @@ if __name__ == "__main__":
     parser = pl.Trainer.add_argparse_args(parser)
     args = parser.parse_args()
     args.num_classes = args.num_labeled_classes + args.num_unlabeled_classes
-    # args.max_epochs=1
+    args.max_epochs=1
     main(args)

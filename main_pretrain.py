@@ -11,16 +11,17 @@ from utils.callbacks import PretrainCheckpointCallback
 
 from argparse import ArgumentParser
 from datetime import datetime
-
+import wandb
+#wandb.init(project='UNO',entity='chfjj')
 
 parser = ArgumentParser()
 parser.add_argument("--dataset", default="CIFAR100", type=str, help="dataset")
-parser.add_argument("--download", default=False, action="store_true", help="wether to download")
+parser.add_argument("--download", default=True, action="store_true", help="wether to download")
 parser.add_argument("--data_dir", default="datasets", type=str, help="data directory")
 parser.add_argument("--log_dir", default="logs", type=str, help="log directory")
 parser.add_argument("--checkpoint_dir", default="checkpoints", type=str, help="checkpoint dir")
 parser.add_argument("--batch_size", default=256, type=int, help="batch size")
-parser.add_argument("--num_workers", default=5, type=int, help="number of workers")
+parser.add_argument("--num_workers", default=16, type=int, help="number of workers")
 parser.add_argument("--arch", default="resnet18", type=str, help="backbone architecture")
 parser.add_argument("--base_lr", default=0.1, type=float, help="learning rate")
 parser.add_argument("--min_lr", default=0.001, type=float, help="min learning rate")
@@ -31,7 +32,7 @@ parser.add_argument("--num_views", default=2, type=int, help="number of views")
 parser.add_argument("--temperature", default=0.1, type=float, help="softmax temperature")
 parser.add_argument("--comment", default=datetime.now().strftime("%b%d_%H-%M-%S"), type=str)
 parser.add_argument("--project", default="UNO", type=str, help="wandb project")
-parser.add_argument("--entity", default="donkeyshot21", type=str, help="wandb entity")
+parser.add_argument("--entity", default="chfjj", type=str, help="wandb entity")
 parser.add_argument("--offline", default=False, action="store_true", help="disable wandb")
 parser.add_argument("--num_labeled_classes", default=80, type=int, help="number of labeled classes")
 parser.add_argument("--num_unlabeled_classes", default=20, type=int, help="number of unlab classes")
@@ -125,6 +126,7 @@ def main(args):
 
     # logger
     run_name = "-".join(["pretrain", args.arch, args.dataset, args.comment])
+    #config=wandb.config
     wandb_logger = pl.loggers.WandbLogger(
         save_dir=args.log_dir,
         name=run_name,
@@ -134,6 +136,8 @@ def main(args):
     )
 
     model = Pretrainer(**args.__dict__)
+
+    #config.learning_rate = 0.01
     trainer = pl.Trainer.from_argparse_args(
         args, logger=wandb_logger, callbacks=[PretrainCheckpointCallback()]
     )
