@@ -15,6 +15,8 @@ from argparse import ArgumentParser
 from datetime import datetime
 from tqdm import tqdm
 
+from mytools import t_sne_projection,dataset_visualization
+
 parser = ArgumentParser()
 parser.add_argument("--dataset", default="CIFAR100", type=str, help="dataset")
 parser.add_argument("--imagenet_split", default="A", type=str, help="imagenet split [A,B,C]")
@@ -48,7 +50,18 @@ parser.add_argument("--num_unlabeled_classes", default=20, type=int, help="numbe
 parser.add_argument("--pretrained", default='checkpoints/epoch=250-step=48944.ckpt',type=str, help="pretrained checkpoint path")
 #parser.add_argument("--gpus",default=1,type=int,help="number of gpus")
 
-class_names=[b'apple', b'aquarium_fish', b'baby', b'bear', b'beaver', b'bed', b'bee', b'beetle', b'bicycle', b'bottle', b'bowl', b'boy', b'bridge', b'bus', b'butterfly', b'camel', b'can', b'castle', b'caterpillar', b'cattle', b'chair', b'chimpanzee', b'clock', b'cloud', b'cockroach', b'couch', b'crab', b'crocodile', b'cup', b'dinosaur', b'dolphin', b'elephant', b'flatfish', b'forest', b'fox', b'girl', b'hamster', b'house', b'kangaroo', b'keyboard', b'lamp', b'lawn_mower', b'leopard', b'lion', b'lizard', b'lobster', b'man', b'maple_tree', b'motorcycle', b'mountain', b'mouse', b'mushroom', b'oak_tree', b'orange', b'orchid', b'otter', b'palm_tree', b'pear', b'pickup_truck', b'pine_tree', b'plain', b'plate', b'poppy', b'porcupine', b'possum', b'rabbit', b'raccoon', b'ray', b'road', b'rocket', b'rose', b'sea', b'seal', b'shark', b'shrew', b'skunk', b'skyscraper', b'snail', b'snake', b'spider', b'squirrel', b'streetcar', b'sunflower', b'sweet_pepper', b'table', b'tank', b'telephone', b'television', b'tiger', b'tractor', b'train', b'trout', b'tulip', b'turtle', b'wardrobe', b'whale', b'willow_tree', b'wolf', b'woman', b'worm']
+# class_names=[b'apple', b'aquarium_fish', b'baby', b'bear', b'beaver', b'bed', b'bee', b'beetle', b'bicycle', b'bottle', b'bowl', b'boy', b'bridge', b'bus', b'butterfly', b'camel', b'can', b'castle', b'caterpillar', b'cattle', b'chair', b'chimpanzee', b'clock', b'cloud', b'cockroach', b'couch', b'crab', b'crocodile', b'cup', b'dinosaur', b'dolphin', b'elephant', b'flatfish', b'forest', b'fox', b'girl', b'hamster', b'house', b'kangaroo', b'keyboard', b'lamp', b'lawn_mower', b'leopard', b'lion', b'lizard', b'lobster', b'man', b'maple_tree', b'motorcycle', b'mountain', b'mouse', b'mushroom', b'oak_tree', b'orange', b'orchid', b'otter', b'palm_tree', b'pear', b'pickup_truck', b'pine_tree', b'plain', b'plate', b'poppy', b'porcupine', b'possum', b'rabbit', b'raccoon', b'ray', b'road', b'rocket', b'rose', b'sea', b'seal', b'shark', b'shrew', b'skunk', b'skyscraper', b'snail', b'snake', b'spider', b'squirrel', b'streetcar', b'sunflower', b'sweet_pepper', b'table', b'tank', b'telephone', b'television', b'tiger', b'tractor', b'train', b'trout', b'tulip', b'turtle', b'wardrobe', b'whale', b'willow_tree', b'wolf', b'woman', b'worm']
+
+class_names=[b'airplane',
+  b'automobile',
+  b'bird',
+  b'cat',
+  b'deer',
+  b'dog',
+  b'frog',
+  b'horse',
+  b'ship',
+  b'truck']
 
 class Discoverer(pl.LightningModule):
     def __init__(self, **kwargs):
@@ -72,7 +85,7 @@ class Discoverer(pl.LightningModule):
         state_dict = {k: v for k, v in state_dict.items() if ("unlab" not in k)}
         self.model.load_state_dict(state_dict, strict=False)
 
-        # Sinkorn-Knopp
+        # Sinkorn-Knopp #########################################
         self.sk = SinkhornKnopp(
             num_iters=self.hparams.num_iters_sk, epsilon=self.hparams.epsilon_sk
         )
@@ -253,23 +266,19 @@ class Discoverer(pl.LightningModule):
                 self.log(prefix + "/acc", result)
                 self.log(prefix_inc + "/acc", result_inc)
 
-def project(features,targets=None):
-    from sklearn.manifold import TSNE
-    import pandas as pd
-    import seaborn as sns
-    #sns.set(rc={'figure.figsize': (11.7, 8.27)})
-    #palette = sns.color_palette("bright", 80)
-    tsne = TSNE()
 
-    x_embedded=tsne.fit_transform(features)  # 进行数据降维,降成两维
-    # a=tsne.fit_transform(data_zs) #a是一个array,a相当于下面的tsne_embedding_
-    sns.scatterplot(x_embedded[:, 0], x_embedded[:, 1], hue=targets, legend='full', )#palette=palette
+
+
 
 
 def main(args):
+    from collections import Counter
     dm = get_datamodule(args, "discover")
     dm.setup()
     dataloader=dm.train_dataloader()
+    valdataloaders=dm.val_dataloader()#[val_subset_unlab_train, val_subset_unlab_test, val_subset_lab_test]
+    # val_iter=valdataloader[2].__iter__()#[val_subset_unlab_train, val_subset_unlab_test, val_subset_lab_test]
+    # val_datas, val_targets = next(val_iter)
     run_name = "-".join(["discover", args.arch, args.dataset, args.comment])
     # wandb_logger = pl.loggers.WandbLogger(
     #     save_dir=args.log_dir,
@@ -280,20 +289,89 @@ def main(args):
     # )
 
     model = Discoverer(**args.__dict__)
-    state_dict = torch.load('checkpoints/epoch=250-step=48944.ckpt')
-    #'checkpoints/epoch=250-step=48944.ckpt'
-    #'checkpoints/pretrain-resnet18-CIFAR100-Sep16_17-27-49.cp'
-    #torch.load(args.pretrained)
-    state_dict = {k: v for k, v in state_dict.items() if ("unlab" not in k)}
-    model.load_state_dict(state_dict, strict=False)
-    #model.load_state_dict(torch.load(args.pretrained))
-    #torch.save(model,'test.pth')
-    for i,datas,targets in enumerate(tqdm(dataloader)):
-        result=model(datas)
-        f=result['feats'][0].detach().numpy()
-        t=targets.numpy()
+
+    state_dict = torch.load('checkpoints/epoch=250-step=48944.ckpt')#  epoch=29-step=5849.ckpt
+    model.load_state_dict(state_dict['state_dict'])
+    # #'checkpoints/epoch=250-step=48944.ckpt'
+    # #'checkpoints/pretrain-resnet18-CIFAR100-Sep16_17-27-49.cp'
+
+    # iter=dataloader.__iter__()
+    # datas,targets=next(iter)
+    # val_iter=valdataloader[2].__iter__()#[val_subset_unlab_train, val_subset_unlab_test, val_subset_lab_test]
+    # val_datas, val_targets = next(val_iter)
+
+    fea_total=np.empty((0,768),np.float32)#256+512
+    tar_total=np.empty(0,np.int64)
+    if True:
+        for i,(datas,targets) in enumerate(tqdm(dataloader)):
+            result=model(datas)
+            preds = result["logits_unlab"]
+            preds_inc = torch.cat(
+                [
+                    result["logits_lab"].unsqueeze(1).expand(-1,args.num_heads, -1, -1),
+                    result["logits_unlab"],
+                ],
+                dim=-1,
+            )
+            #preds = preds.max(dim=-1)[1]
+            preds_inc = preds_inc.max(dim=-1)[1]
+            preds_inc=preds_inc.permute((2,0,1))
+            preds_inc=torch.reshape(preds_inc,(preds_inc.shape[0],-1))
+            #collections.Counter(preds_inc)
+            pp=[Counter(p).most_common(1)[0][0] for p in preds_inc.numpy()]
+            pp=np.array(pp)
+            f=result['feats'].max(0)[0]
+            pfu = result['proj_feats_unlab'].max(0)[0].max(0)[0]
+            cat_fea = torch.cat([f, pfu], dim=1).detach().numpy()
+            #
+            t=targets.numpy()
+            fea_total=np.concatenate([fea_total,cat_fea],axis=0)
+            tar_total=np.concatenate([tar_total,t],axis=0)
+
+            print(np.equal(pp, t).sum() / args.batch_size)
+
+        np.savez('proj_numpy', x=fea_total, y=tar_total)
+        t_sne_projection(fea_total, tar_total)
+
         #keys: 'feats', 'logits_lab', 'logits_unlab', 'proj_feats_unlab', 'logits_unlab_over', 'proj_feats_unlab_over'
 
+    cat_fea_total=np.empty((0,768),np.float32)
+    cat_fea_target_total=np.empty(0,np.int64)
+    for in_dataloader,valdataloader in enumerate(valdataloaders):
+        cat_fea_sub = np.empty((0, 768), np.float32)
+        cat_fea_target_sub = np.empty(0, np.int64)
+        for i,(val_datas,val_targets) in enumerate(tqdm(valdataloader)):
+            result=model(val_datas)
+            preds = result["logits_unlab"]
+            preds_inc = torch.cat(
+                [
+                    result["logits_lab"].unsqueeze(0).expand( args.num_heads, -1, -1),
+                    result["logits_unlab"],
+                ],
+                dim=-1,
+            )
+            preds = preds.max(dim=-1)[1]
+            preds_inc = preds_inc.max(dim=-1)[1]
+            preds_inc = preds_inc.permute((1,0))
+            #preds_inc = torch.reshape(preds_inc, (preds_inc.shape[0], -1))
+
+            pp = [Counter(p).most_common(1)[0][0] for p in preds_inc.numpy()]
+            pp = np.array(pp)
+            f=result['feats']#.detach().numpy()
+            pfu,_= result['proj_feats_unlab'].max(0)
+            # pfu_n = pfu.detach().numpy()
+            cat_fea=torch.cat([f,pfu],dim=1).detach().numpy()
+            t = val_targets.numpy()
+            cat_fea_sub=np.concatenate([cat_fea_sub, cat_fea],axis=0)
+            cat_fea_target_sub = np.concatenate([cat_fea_target_sub, t], axis=0)
+            print(np.equal(pp,t).sum()/args.batch_size)
+
+        np.savez('proj_numpy_test' + str(in_dataloader), x=cat_fea_sub, y=cat_fea_target_sub)
+        cat_fea_total = np.concatenate([cat_fea_total, cat_fea_sub], axis=0)
+        cat_fea_target_total = np.concatenate([cat_fea_target_total, cat_fea_target_sub], axis=0)
+
+    np.savez('proj_numpy_test', x=cat_fea_total, y=cat_fea_target_total)
+    t_sne_projection(cat_fea_total, cat_fea_target_total)
     #trainer = pl.Trainer.from_argparse_args(args, logger=wandb_logger)
     #trainer.fit(model, dm)
 
@@ -304,3 +382,6 @@ if __name__ == "__main__":
     args.num_classes = args.num_labeled_classes + args.num_unlabeled_classes
     args.max_epochs=1
     main(args)
+
+#--dataset CIFAR10 --gpus 1 --precision 16 --max_epochs 30 --batch_size 256 --num_labeled_classes 5 --num_unlabeled_classes 5 --pretrained checkpoints/epoch=29-step=5849.ckpt --num_heads 4 --comment 5_5
+
