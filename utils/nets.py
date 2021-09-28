@@ -52,12 +52,12 @@ class MultiHead(nn.Module):
         # projectors
         self.projectors = torch.nn.ModuleList(
             [MLP(input_dim, hidden_dim, output_dim, num_hidden_layers) for _ in range(num_heads)]
-        )
+        )#num_heads heads
 
         # prototypes
         self.prototypes = torch.nn.ModuleList(
             [Prototypes(output_dim, num_prototypes) for _ in range(num_heads)]
-        )
+        )# map to classes
         self.normalize_prototypes()
 
     @torch.no_grad()
@@ -68,11 +68,11 @@ class MultiHead(nn.Module):
     def forward_head(self, head_idx, feats):
         z = self.projectors[head_idx](feats)
         z = F.normalize(z, dim=1)
-        return self.prototypes[head_idx](z), z
+        return self.prototypes[head_idx](z), z #output, embedding
 
     def forward(self, feats):
         out = [self.forward_head(h, feats) for h in range(self.num_heads)]
-        return [torch.stack(o) for o in map(list, zip(*out))]
+        return [torch.stack(o) for o in map(list, zip(*out))]#[prototypes_(z)_stack , z_stack] #output,embedding
 
 
 class MultiHeadResNet(nn.Module):
@@ -100,7 +100,7 @@ class MultiHeadResNet(nn.Module):
             self.encoder.maxpool = nn.Identity()
             self._reinit_all_layers()
 
-        self.head_lab = Prototypes(self.feat_dim, num_labeled)
+        self.head_lab = Prototypes(self.feat_dim, num_labeled)#
         if num_heads is not None:
             self.head_unlab = MultiHead(
                 input_dim=self.feat_dim,
@@ -138,7 +138,7 @@ class MultiHeadResNet(nn.Module):
     def forward_heads(self, feats):
         out = {"logits_lab": self.head_lab(feats)}
         if getattr(self, "head_unlab", False):
-            logits_unlab, proj_feats_unlab = self.head_unlab(feats)
+            logits_unlab, proj_feats_unlab = self.head_unlab(feats)#[prototypes_(z)_stack , z_stack] #logits , proj [n,num_heads, num_hidden,num_classes]
             logits_unlab_over, proj_feats_unlab_over = self.head_unlab_over(feats)
             out.update(
                 {

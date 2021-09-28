@@ -19,7 +19,7 @@ def Dealdata(meta, train):
         if fineLabel not in fineLableToCoraseLabelDict.keys():
             fineLableToCoraseLabelDict[fineLabel]=str(coarseLabel)+"-"+meta[b'coarse_label_names'][coarseLabel].decode('utf-8')
 
-
+meta10=unpickle('datasets/cifar-10-batches-py/batches.meta')
 metaPath = 'datasets/cifar-100-python/meta'
 # 解压后train的路径
 trainPath = 'datasets/cifar-100-python/train'
@@ -27,6 +27,8 @@ trainPath = 'datasets/cifar-100-python/train'
 meta = unpickle(metaPath)
 train = unpickle(trainPath)
 Dealdata(meta, train)
+
+
 cifar100_class_names=dict(enumerate(meta[b'fine_label_names']))
 print(cifar100_class_names)
 print(meta[b'fine_label_names'])

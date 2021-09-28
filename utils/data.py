@@ -118,17 +118,17 @@ class DiscoverCIFARDataModule(pl.LightningDataModule):
         val_indices_unlab_train = np.where(
             np.isin(np.array(val_dataset_train.targets), unlabeled_classes)
         )[0]
-        val_subset_unlab_train = torch.utils.data.Subset(val_dataset_train, val_indices_unlab_train)
+        val_subset_unlab_train = torch.utils.data.Subset(val_dataset_train, val_indices_unlab_train)#根据索引划分子集
         # unlabeled classes, test set
         val_indices_unlab_test = np.where(
             np.isin(np.array(val_dataset_test.targets), unlabeled_classes)
         )[0]
-        val_subset_unlab_test = torch.utils.data.Subset(val_dataset_test, val_indices_unlab_test)
+        val_subset_unlab_test = torch.utils.data.Subset(val_dataset_test, val_indices_unlab_test)#根据索引划分子集
         # labeled classes, test set
         val_indices_lab_test = np.where(
             np.isin(np.array(val_dataset_test.targets), labeled_classes)
         )[0]
-        val_subset_lab_test = torch.utils.data.Subset(val_dataset_test, val_indices_lab_test)
+        val_subset_lab_test = torch.utils.data.Subset(val_dataset_test, val_indices_lab_test)#根据索引划分子集
 
         self.val_datasets = [val_subset_unlab_train, val_subset_unlab_test, val_subset_lab_test]
 
