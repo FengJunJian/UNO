@@ -1,7 +1,7 @@
 import torch
 import torchvision
 import pytorch_lightning as pl
-
+from torch.utils.data import DataLoader
 from utils.transforms import get_transforms
 from utils.transforms import DiscoveryTargetTransform
 
@@ -59,23 +59,25 @@ class PretrainCIFARDataModule(pl.LightningDataModule):
         self.val_dataset = torch.utils.data.Subset(self.val_dataset, val_indices_lab)
 
     def train_dataloader(self):
-        return torch.utils.data.DataLoader(
+        return DataLoader(
             self.train_dataset,
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
             pin_memory=True,
             drop_last=True,
+            prefetch_factor=4
         )
 
     def val_dataloader(self):
-        return torch.utils.data.DataLoader(
+        return DataLoader(
             self.val_dataset,
             batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,
             pin_memory=True,
             drop_last=False,
+            prefetch_factor=4
         )
 
 
@@ -137,24 +139,26 @@ class DiscoverCIFARDataModule(pl.LightningDataModule):
         return {0: "unlab/train", 1: "unlab/test", 2: "lab/test"}
 
     def train_dataloader(self):
-        return torch.utils.data.DataLoader(
+        return DataLoader(
             self.train_dataset,
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
             pin_memory=True,
             drop_last=True,
+            prefetch_factor=4
         )
 
     def val_dataloader(self):
         return [
-            torch.utils.data.DataLoader(
+            DataLoader(
                 dataset,
                 batch_size=self.batch_size,
                 shuffle=False,
                 num_workers=self.num_workers,
                 pin_memory=True,
                 drop_last=False,
+                prefetch_factor=4
             )
             for dataset in self.val_datasets
         ]
@@ -468,24 +472,26 @@ class DiscoverImageNetDataModule(pl.LightningDataModule):
         return {0: "unlab/train", 1: "unlab/test", 2: "lab/test"}
 
     def train_dataloader(self):
-        return torch.utils.data.DataLoader(
+        return DataLoader(
             self.train_dataset,
             batch_size=self.batch_size // 2,
             shuffle=True,
             num_workers=self.num_workers,
             pin_memory=True,
             drop_last=True,
+            prefetch_factor=4
         )
 
     def val_dataloader(self):
         return [
-            torch.utils.data.DataLoader(
+            DataLoader(
                 dataset,
                 batch_size=self.batch_size,
                 shuffle=False,
                 num_workers=self.num_workers,
                 pin_memory=True,
                 drop_last=False,
+                prefetch_factor=4
             )
             for dataset in self.val_datasets
         ]
@@ -538,21 +544,23 @@ class PretrainImageNetDataModule(pl.LightningDataModule):
         self.val_dataset = torch.utils.data.Subset(val_dataset, labeled_idxs)
 
     def train_dataloader(self):
-        return torch.utils.data.DataLoader(
+        return DataLoader(
             self.train_dataset,
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
             pin_memory=True,
             drop_last=True,
+            prefetch_factor=4
         )
 
     def val_dataloader(self):
-        return torch.utils.data.DataLoader(
+        return DataLoader(
             self.val_dataset,
             batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,
             pin_memory=True,
             drop_last=False,
+            prefetch_factor=4
         )
