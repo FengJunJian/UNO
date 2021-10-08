@@ -279,14 +279,8 @@ def main(args):
     valdataloaders=dm.val_dataloader()#[val_subset_unlab_train, val_subset_unlab_test, val_subset_lab_test]
     # val_iter=valdataloader[2].__iter__()#[val_subset_unlab_train, val_subset_unlab_test, val_subset_lab_test]
     # val_datas, val_targets = next(val_iter)
-    run_name = "-".join(["discover", args.arch, args.dataset, args.comment])
-    # wandb_logger = pl.loggers.WandbLogger(
-    #     save_dir=args.log_dir,
-    #     name=run_name,
-    #     project=args.project,
-    #     entity=args.entity,
-    #     offline=args.offline,
-    # )
+    #run_name = "-".join(["discover", args.arch, args.dataset, args.comment])
+
 
     model = Discoverer(**args.__dict__)
 
@@ -374,7 +368,6 @@ def main(args):
     t_sne_projection(cat_fea_total, cat_fea_target_total)
     #trainer = pl.Trainer.from_argparse_args(args, logger=wandb_logger)
     #trainer.fit(model, dm)
-
 
 if __name__ == "__main__":
     parser = pl.Trainer.add_argparse_args(parser)
