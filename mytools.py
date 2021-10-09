@@ -36,6 +36,9 @@ def dataset_visualization(data,dataset_name='CIFAR10'):
     plt.imshow(data1.astype(np.uint8))
     plt.show()
 
+
+
+
 if __name__ == "__main__":
     begin=ord('a')
     class_name=[chr(begin+i) for i in range(26)]

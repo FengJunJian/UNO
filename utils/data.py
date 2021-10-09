@@ -1,7 +1,9 @@
 import torch
 import torchvision
+import torchvision.transforms as transforms
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
+from torch.utils.data.sampler import WeightedRandomSampler
 from utils.transforms import get_transforms
 from utils.transforms import DiscoveryTargetTransform
 
@@ -10,13 +12,18 @@ import os
 
 
 def get_datamodule(args, mode):
+
     if mode == "pretrain":
-        if args.dataset == "ImageNet":
+        if args.dataset == "ship":
+            return PretrainShipDataModule(args)
+        elif args.dataset == "ImageNet":
             return PretrainImageNetDataModule(args)
         else:
             return PretrainCIFARDataModule(args)
     elif mode == "discover":
-        if args.dataset == "ImageNet":
+        if args.dataset =="ship":
+            return DiscoverShipDataModule(args)
+        elif args.dataset == "ImageNet":
             return DiscoverImageNetDataModule(args)
         else:
             return DiscoverCIFARDataModule(args)
@@ -80,6 +87,92 @@ class PretrainCIFARDataModule(pl.LightningDataModule):
             prefetch_factor=4
         )
 
+
+class PretrainShipDataModule(pl.LightningDataModule):
+    def __init__(self, args):
+        super().__init__()
+        self.data_dir = args.data_dir
+        self.download = args.download
+        self.batch_size = args.batch_size
+        self.num_workers = args.num_workers
+        self.num_labeled_classes = args.num_labeled_classes
+        self.num_unlabeled_classes = args.num_unlabeled_classes
+        #self.dataset_class = getattr(torchvision.datasets, args.dataset)
+        self.dataset= torchvision.datasets.ImageFolder(self.data_dir,transform=transforms.ToTensor())
+        self.transform_train = get_transforms("unsupervised", args.dataset, args.num_views)
+        self.transform_val = get_transforms("eval", args.dataset, args.num_views)
+
+    def prepare_data(self):
+        pass
+        # self.dataset_class(self.data_dir, train=True, download=self.download)
+        # self.dataset_class(self.data_dir, train=False, download=self.download)
+
+    def setup(self, stage=None):
+        from copy import copy
+        labeled_classes = range(self.num_labeled_classes)
+
+        N = len(self.dataset)
+        train_size = int(N * 0.8)
+        val_size = N - train_size
+        #test_size = N - train_size - val_size
+        trainDataset, valDataset = torch.utils.data.random_split(self.dataset,[train_size, val_size])
+
+        # train dataset
+        self.train_dataset = copy(trainDataset)
+        self.train_dataset.dataset.transform = self.transform_train
+        subTarget=np.array(self.train_dataset.dataset.targets)[np.array(self.train_dataset.indices)]
+        train_indices_lab = np.where(
+            np.isin(subTarget, labeled_classes)
+        )[0]
+        self.train_dataset = torch.utils.data.Subset(self.train_dataset, train_indices_lab)
+
+        # val datasets
+        self.val_dataset = copy(valDataset)
+        self.val_dataset.transform = self.transform_val
+
+        subTarget = np.array(self.val_dataset.dataset.targets)[np.array(self.val_dataset.indices)]
+        val_indices_lab = np.where(np.isin(subTarget, labeled_classes))[0]
+        self.val_dataset = torch.utils.data.Subset(self.val_dataset, val_indices_lab)
+
+    def make_weights_for_balanced_classes(self,dataset, nclasses):
+        count = [0] * nclasses
+        for item in dataset:
+            #label=dataset[i][1]
+            count[item[1]] += 1
+        weight_per_class = [0.] * nclasses
+        N = float(sum(count))
+        for i in range(nclasses):
+            weight_per_class[i] = N / float(count[i])
+        weight = [0] * len(dataset)
+        for idx, val in enumerate(dataset):
+            weight[idx] = weight_per_class[val[1]]
+        return weight
+
+    def train_dataloader(self):
+        weights = self.make_weights_for_balanced_classes(self.train_dataset, self.num_labeled_classes)
+        weights = torch.DoubleTensor(weights)
+        sampler = WeightedRandomSampler(weights, len(weights), replacement=True)
+        return DataLoader(
+            self.train_dataset,
+            batch_size=self.batch_size,
+            sampler=sampler,
+            #shuffle=True,
+            num_workers=self.num_workers,
+            pin_memory=True,
+            drop_last=True,
+            prefetch_factor=4
+        )
+
+    def val_dataloader(self):
+        return DataLoader(
+            self.val_dataset,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            pin_memory=True,
+            drop_last=False,
+            prefetch_factor=4
+        )
 
 class DiscoverCIFARDataModule(pl.LightningDataModule):
     def __init__(self, args):
@@ -163,6 +256,126 @@ class DiscoverCIFARDataModule(pl.LightningDataModule):
             for dataset in self.val_datasets
         ]
 
+class DiscoverShipDataModule(pl.LightningDataModule):
+    def __init__(self, args):
+        super().__init__()
+        self.data_dir = args.data_dir
+        self.download = args.download
+        self.batch_size = args.batch_size
+        self.num_workers = args.num_workers
+        self.num_labeled_classes = args.num_labeled_classes
+        self.num_unlabeled_classes = args.num_unlabeled_classes
+        self.dataset = torchvision.datasets.ImageFolder(self.data_dir)
+        #self.dataset_class = getattr(torchvision.datasets, args.dataset)
+        self.transform_train = get_transforms("unsupervised", args.dataset, args.num_views)
+        self.transform_val = get_transforms("eval", args.dataset, args.num_views)
+
+    def prepare_data(self):
+        #raise NotImplementedError
+        pass
+        # self.dataset_class(self.data_dir, train=True, download=self.download)
+        # self.dataset_class(self.data_dir, train=False, download=self.download)
+
+    def setup(self, stage=None):
+        from copy import copy
+        labeled_classes = range(self.num_labeled_classes)
+        unlabeled_classes = range(
+            self.num_labeled_classes, self.num_labeled_classes + self.num_unlabeled_classes
+        )
+        N = len(self.dataset)
+        train_size = int(N * 0.8)
+        val_size = int(N * 0.1)
+        test_size = N - train_size - val_size
+        trainDataset, valDataset, testDataset = torch.utils.data.random_split(self.dataset,
+                                                                              [train_size, val_size, test_size])
+        # train dataset
+        #self.dataset_class
+        self.train_dataset = copy(trainDataset)
+        self.train_dataset.transform=self.transform_train
+
+        # val datasets
+        val_dataset_train = copy(valDataset)
+        val_dataset_train.transform=self.transform_val
+
+        val_dataset_test = copy(testDataset)
+        val_dataset_test.transform=self.transform_val
+
+        # unlabeled classes, train set
+        subTarget = np.array(val_dataset_train.dataset.targets)[np.array(val_dataset_train.indices)]
+        val_indices_unlab_train = np.where(
+            np.isin(subTarget, unlabeled_classes)
+        )[0]
+
+        val_subset_unlab_train = torch.utils.data.Subset(val_dataset_train, val_indices_unlab_train)#根据索引划分子集
+        # unlabeled classes, test set
+        subTarget = np.array(val_dataset_test.dataset.targets)[np.array(val_dataset_test.indices)]
+        val_indices_unlab_test = np.where(
+            np.isin(subTarget, unlabeled_classes)
+        )[0]
+        val_subset_unlab_test = torch.utils.data.Subset(val_dataset_test, val_indices_unlab_test)#根据索引划分子集
+        # labeled classes, test set
+        #subTarget = np.array(val_dataset_test.dataset.targets)[np.array(val_dataset_test.indices)]
+        val_indices_lab_test = np.where(
+            np.isin(subTarget, labeled_classes)
+        )[0]
+        val_subset_lab_test = torch.utils.data.Subset(val_dataset_test, val_indices_lab_test)#根据索引划分子集
+
+        self.val_datasets = [val_subset_unlab_train, val_subset_unlab_test, val_subset_lab_test]
+
+    @property
+    def dataloader_mapping(self):
+        return {0: "unlab/train", 1: "unlab/test", 2: "lab/test"}
+
+    def make_weights_for_balanced_classes(self,dataset, nclasses):
+        count = [0] * nclasses
+        for item in dataset:
+            count[item[1]] += 1
+        weight_per_class = [0.] * nclasses
+        N = float(sum(count))
+        for i in range(nclasses):
+            weight_per_class[i] = N / float(count[i])
+        weight = [0] * len(dataset)
+        for idx, val in enumerate(dataset):
+            weight[idx] = weight_per_class[val[1]]
+        return weight
+
+    def train_dataloader(self):
+        # from tqdm import tqdm
+        # coll=[0]*(self.num_labeled_classes+self.num_unlabeled_classes)
+        # for item in tqdm(self.train_dataset):
+        #     coll[item[1]]+=1
+
+        weights = self.make_weights_for_balanced_classes(self.train_dataset, self.num_labeled_classes+self.num_unlabeled_classes)
+        weights = torch.DoubleTensor(weights)
+        sampler = WeightedRandomSampler(weights, len(weights), replacement=True)
+        return DataLoader(
+            self.train_dataset,
+            batch_size=self.batch_size,
+            sampler=sampler,
+            #shuffle=True,
+            num_workers=self.num_workers,
+            pin_memory=True,
+            drop_last=True,
+            prefetch_factor=4
+        )
+
+    def val_dataloader(self):
+        dataloader_list=[]
+        for dataset in self.val_datasets:
+            # weights = self.make_weights_for_balanced_classes(self.train_dataset.imgs, len(self.train_dataset.classes))
+            # weights = torch.DoubleTensor(weights)
+            # sampler = WeightedRandomSampler(weights, len(weights), replacement=True)
+            dataloader_list.append(
+                DataLoader(
+                dataset,
+                batch_size=self.batch_size,
+                shuffle=False,
+                num_workers=self.num_workers,
+                pin_memory=True,
+                drop_last=False,
+                prefetch_factor=4))
+
+        return dataloader_list
 
 IMAGENET_CLASSES_118 = [
     "n01498041",
