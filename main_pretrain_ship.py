@@ -122,7 +122,7 @@ class Pretrainer(pl.LightningModule):
 def main(args):
     # build datamodule
     dm = get_datamodule(args, "pretrain")
-    # dm.setup()
+    #dm.setup()
     # td=dm.train_dataloader()
     # vd=dm.val_dataloader()
 
@@ -149,5 +149,5 @@ def main(args):
 if __name__ == "__main__":
     parser = pl.Trainer.add_argparse_args(parser)
     args = parser.parse_args()
-    args.max_epochs=5
+    #args.max_epochs=5
     main(args)

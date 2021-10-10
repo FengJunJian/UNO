@@ -255,7 +255,7 @@ class Discoverer(pl.LightningModule):
 
 def main(args):
     dm = get_datamodule(args, "discover")
-    dm.setup()
+    # dm.setup()
 
     run_name = "-".join(["discover", args.arch, args.dataset, args.comment])
     wandb_logger = pl.loggers.WandbLogger(
@@ -276,5 +276,5 @@ if __name__ == "__main__":
     parser = pl.Trainer.add_argparse_args(parser)
     args = parser.parse_args()
     args.num_classes = args.num_labeled_classes + args.num_unlabeled_classes
-    args.max_epochs=2
+    #args.max_epochs=2
     main(args)
