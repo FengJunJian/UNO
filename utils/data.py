@@ -38,7 +38,7 @@ class PretrainCIFARDataModule(pl.LightningDataModule):
         self.num_workers = args.num_workers
         self.num_labeled_classes = args.num_labeled_classes
         self.num_unlabeled_classes = args.num_unlabeled_classes
-        self.dataset_class = getattr(torchvision.datasets, args.dataset)
+        self.dataset_class = getattr(torchvision.datasets, args.dataset)#返回属性
         self.transform_train = get_transforms("unsupervised", args.dataset, args.num_views)
         self.transform_val = get_transforms("eval", args.dataset, args.num_views)
 
@@ -73,7 +73,7 @@ class PretrainCIFARDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=True,
             drop_last=True,
-            prefetch_factor=4
+            prefetch_factor=3
         )
 
     def val_dataloader(self):
@@ -84,7 +84,7 @@ class PretrainCIFARDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=True,
             drop_last=False,
-            prefetch_factor=4
+            prefetch_factor=3
         )
 
 
@@ -97,28 +97,29 @@ class PretrainShipDataModule(pl.LightningDataModule):
         self.num_workers = args.num_workers
         self.num_labeled_classes = args.num_labeled_classes
         self.num_unlabeled_classes = args.num_unlabeled_classes
-        #self.dataset_class = getattr(torchvision.datasets, args.dataset)
-        self.dataset= torchvision.datasets.ImageFolder(self.data_dir,transform=transforms.ToTensor())
+        #self.dataset_class = getattr(torchvision.datasets, 'CIFAR10')
+        self.dataset= torchvision.datasets.ImageFolder(self.data_dir)#transform=transforms.ToTensor()
         self.transform_train = get_transforms("unsupervised", args.dataset, args.num_views)
         self.transform_val = get_transforms("eval", args.dataset, args.num_views)
 
     def prepare_data(self):
         pass
-        # self.dataset_class(self.data_dir, train=True, download=self.download)
-        # self.dataset_class(self.data_dir, train=False, download=self.download)
+        # self.dataset_class(os.path.join(self.data_dir,'..'), train=True, download=self.download)
+        # self.dataset_class(os.path.join(self.data_dir,'..'), train=False, download=self.download)
 
     def setup(self, stage=None):
         from copy import copy
+        #self.train_dataset1 = self.dataset_class(os.path.join(self.data_dir,'..'), train=True, transform=self.transform_train)
         labeled_classes = range(self.num_labeled_classes)
 
         N = len(self.dataset)
         train_size = int(N * 0.8)
         val_size = N - train_size
-        #test_size = N - train_size - val_size
-        trainDataset, valDataset = torch.utils.data.random_split(self.dataset,[train_size, val_size])
 
+        trainDataset, valDataset = torch.utils.data.random_split(self.dataset,[train_size, val_size])
+        trainDataset.dataset=copy(self.dataset)
         # train dataset
-        self.train_dataset = copy(trainDataset)
+        self.train_dataset = trainDataset
         self.train_dataset.dataset.transform = self.transform_train
         subTarget=np.array(self.train_dataset.dataset.targets)[np.array(self.train_dataset.indices)]
         train_indices_lab = np.where(
@@ -127,8 +128,8 @@ class PretrainShipDataModule(pl.LightningDataModule):
         self.train_dataset = torch.utils.data.Subset(self.train_dataset, train_indices_lab)
 
         # val datasets
-        self.val_dataset = copy(valDataset)
-        self.val_dataset.transform = self.transform_val
+        self.val_dataset = valDataset
+        self.val_dataset.dataset.transform = self.transform_val
 
         subTarget = np.array(self.val_dataset.dataset.targets)[np.array(self.val_dataset.indices)]
         val_indices_lab = np.where(np.isin(subTarget, labeled_classes))[0]
@@ -160,7 +161,7 @@ class PretrainShipDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=True,
             drop_last=True,
-            prefetch_factor=4
+            prefetch_factor=3
         )
 
     def val_dataloader(self):
@@ -171,7 +172,7 @@ class PretrainShipDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=True,
             drop_last=False,
-            prefetch_factor=4
+            prefetch_factor=3
         )
 
 class DiscoverCIFARDataModule(pl.LightningDataModule):
@@ -239,7 +240,7 @@ class DiscoverCIFARDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=True,
             drop_last=True,
-            prefetch_factor=4
+            prefetch_factor=3
         )
 
     def val_dataloader(self):
@@ -251,7 +252,7 @@ class DiscoverCIFARDataModule(pl.LightningDataModule):
                 num_workers=self.num_workers,
                 pin_memory=True,
                 drop_last=False,
-                prefetch_factor=4
+                prefetch_factor=3
             )
             for dataset in self.val_datasets
         ]
@@ -266,12 +267,11 @@ class DiscoverShipDataModule(pl.LightningDataModule):
         self.num_labeled_classes = args.num_labeled_classes
         self.num_unlabeled_classes = args.num_unlabeled_classes
         self.dataset = torchvision.datasets.ImageFolder(self.data_dir)
-        #self.dataset_class = getattr(torchvision.datasets, args.dataset)
+        #self.dataset_class = getattr(torchvision.datasets, 'CIFAR10')
         self.transform_train = get_transforms("unsupervised", args.dataset, args.num_views)
         self.transform_val = get_transforms("eval", args.dataset, args.num_views)
 
     def prepare_data(self):
-        #raise NotImplementedError
         pass
         # self.dataset_class(self.data_dir, train=True, download=self.download)
         # self.dataset_class(self.data_dir, train=False, download=self.download)
@@ -288,17 +288,19 @@ class DiscoverShipDataModule(pl.LightningDataModule):
         test_size = N - train_size - val_size
         trainDataset, valDataset, testDataset = torch.utils.data.random_split(self.dataset,
                                                                               [train_size, val_size, test_size])
+        trainDataset.dataset = copy(self.dataset)
+        valDataset.dataset = copy(self.dataset)
         # train dataset
         #self.dataset_class
-        self.train_dataset = copy(trainDataset)
-        self.train_dataset.transform=self.transform_train
+        self.train_dataset = trainDataset
+        self.train_dataset.dataset.transform=self.transform_train
 
         # val datasets
-        val_dataset_train = copy(valDataset)
-        val_dataset_train.transform=self.transform_val
+        val_dataset_train = valDataset
+        val_dataset_train.dataset.transform=self.transform_val
 
-        val_dataset_test = copy(testDataset)
-        val_dataset_test.transform=self.transform_val
+        val_dataset_test = testDataset
+        val_dataset_test.dataset.transform=self.transform_val
 
         # unlabeled classes, train set
         subTarget = np.array(val_dataset_train.dataset.targets)[np.array(val_dataset_train.indices)]
@@ -356,7 +358,7 @@ class DiscoverShipDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=True,
             drop_last=True,
-            prefetch_factor=4
+            prefetch_factor=3
         )
 
     def val_dataloader(self):
@@ -373,7 +375,7 @@ class DiscoverShipDataModule(pl.LightningDataModule):
                 num_workers=self.num_workers,
                 pin_memory=True,
                 drop_last=False,
-                prefetch_factor=4))
+                prefetch_factor=3))
 
         return dataloader_list
 
@@ -692,7 +694,7 @@ class DiscoverImageNetDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=True,
             drop_last=True,
-            prefetch_factor=4
+            prefetch_factor=3
         )
 
     def val_dataloader(self):
@@ -704,7 +706,7 @@ class DiscoverImageNetDataModule(pl.LightningDataModule):
                 num_workers=self.num_workers,
                 pin_memory=True,
                 drop_last=False,
-                prefetch_factor=4
+                prefetch_factor=3
             )
             for dataset in self.val_datasets
         ]
@@ -764,7 +766,7 @@ class PretrainImageNetDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=True,
             drop_last=True,
-            prefetch_factor=4
+            prefetch_factor=3
         )
 
     def val_dataloader(self):
@@ -775,5 +777,5 @@ class PretrainImageNetDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=True,
             drop_last=False,
-            prefetch_factor=4
+            prefetch_factor=3
         )

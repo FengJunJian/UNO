@@ -149,12 +149,12 @@ def get_transforms(mode, dataset, num_views=None):
                 num_views,
                 transforms.Compose(
                     [
-                        transforms.ToTensor(),
+                        #transforms.ToTensor(),
                         transforms.Resize((64, 128)),  # (h,w)
                         transforms.RandomChoice(
                             [
-                                transforms.RandomCrop(32, padding=4),
-                                transforms.RandomResizedCrop(32, (0.8, 1.0)),
+                                transforms.RandomCrop(64, padding=4),
+                                transforms.RandomResizedCrop(64, (0.8, 1.0)),
                             ]
                         ),
                         transforms.RandomHorizontalFlip(),
@@ -169,9 +169,9 @@ def get_transforms(mode, dataset, num_views=None):
             ),
             "supervised": transforms.Compose(
                 [
-                    transforms.ToTensor(),
+                    #transforms.ToTensor(),
                     transforms.Resize((64, 128)),  # (h,w)
-                    transforms.RandomCrop(32, padding=4),
+                    transforms.RandomCrop(64, padding=4),
                     transforms.RandomHorizontalFlip(),
                     transforms.ToTensor(),
                     transforms.Normalize(mean, std),
@@ -179,9 +179,9 @@ def get_transforms(mode, dataset, num_views=None):
             ),
             "eval": transforms.Compose(
                 [
-                    transforms.ToTensor(),
+                    # transforms.ToTensor(),
                     transforms.Resize((64, 128)),  # (h,w)
-                    transforms.CenterCrop(32),
+                    transforms.CenterCrop(64),
                     transforms.ToTensor(),
                     transforms.Normalize(mean, std),
                 ]
