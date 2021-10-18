@@ -9,8 +9,25 @@ from utils.transforms import DiscoveryTargetTransform
 
 import numpy as np
 import os
+from tqdm import tqdm
 
-
+CLASS_NAMES=['Boat',  # 0
+           'bulk cargo carrier',  # 1
+           'Buoy',  # 2
+           'container ship',  # 3
+           'Ferry',  # 4
+           'fishing boat',  # 5
+           'flying bird',  # 6
+           'general cargo ship',  # 7
+           'Kayak',  # 8
+           'ore carrier',  # 9
+           'Other',  # 10
+           'passenger ship',  # 11
+           'Sail boat',  # 12
+           'Speed boat',  # 13
+           'vessel'  # 14
+           ]
+SHIP_ADVANCED_INDS=[14,0,1,2,3,4,5,7,8,9,10,11,12,13,6]
 def get_datamodule(args, mode):
 
     if mode == "pretrain":
@@ -73,7 +90,7 @@ class PretrainCIFARDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=True,
             drop_last=True,
-            prefetch_factor=3
+            prefetch_factor=2
         )
 
     def val_dataloader(self):
@@ -84,7 +101,7 @@ class PretrainCIFARDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=True,
             drop_last=False,
-            prefetch_factor=3
+            prefetch_factor=2
         )
 
 
@@ -101,6 +118,9 @@ class PretrainShipDataModule(pl.LightningDataModule):
         self.dataset= torchvision.datasets.ImageFolder(self.data_dir)#transform=transforms.ToTensor()
         self.transform_train = get_transforms("unsupervised", args.dataset, args.num_views)
         self.transform_val = get_transforms("eval", args.dataset, args.num_views)
+        self.class_names = CLASS_NAMES
+        #self.class_index = list(dict(list(zip(range(len(self.class_names)), self.class_names))).keys())
+        #self.labeled_advanced_inds=np.array(SHIP_ADVANCED_INDS)
 
     def prepare_data(self):
         pass
@@ -110,7 +130,11 @@ class PretrainShipDataModule(pl.LightningDataModule):
     def setup(self, stage=None):
         from copy import copy
         #self.train_dataset1 = self.dataset_class(os.path.join(self.data_dir,'..'), train=True, transform=self.transform_train)
-        labeled_classes = range(self.num_labeled_classes)
+        assert len(self.class_names)>self.num_labeled_classes
+
+        #labeled_classes = class_index#
+        labeled_classes=np.arange(self.num_labeled_classes)
+        #labeled_classes=self.labeled_advanced_inds[np.arange(self.num_labeled_classes)]
 
         N = len(self.dataset)
         train_size = int(N * 0.8)
@@ -137,17 +161,22 @@ class PretrainShipDataModule(pl.LightningDataModule):
 
     def make_weights_for_balanced_classes(self,dataset, nclasses):
         count = [0] * nclasses
-        for item in dataset:
-            #label=dataset[i][1]
+        weight = [0] * len(dataset)
+        val_list = [0] * len(dataset)
+
+        for idx, item in enumerate(tqdm(dataset)):
+            # label=dataset[i][1]
             count[item[1]] += 1
+            val_list[idx] = item[1]
         weight_per_class = [0.] * nclasses
         N = float(sum(count))
         for i in range(nclasses):
             weight_per_class[i] = N / float(count[i])
-        weight = [0] * len(dataset)
-        for idx, val in enumerate(dataset):
-            weight[idx] = weight_per_class[val[1]]
+
+        for idx, val in enumerate(tqdm(val_list)):
+            weight[idx] = weight_per_class[val_list[idx]]
         return weight
+
 
     def train_dataloader(self):
         weights = self.make_weights_for_balanced_classes(self.train_dataset, self.num_labeled_classes)
@@ -161,7 +190,7 @@ class PretrainShipDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=True,
             drop_last=True,
-            prefetch_factor=3
+            prefetch_factor=2
         )
 
     def val_dataloader(self):
@@ -172,7 +201,7 @@ class PretrainShipDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=True,
             drop_last=False,
-            prefetch_factor=3
+            prefetch_factor=2
         )
 
 class DiscoverCIFARDataModule(pl.LightningDataModule):
@@ -240,7 +269,7 @@ class DiscoverCIFARDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=True,
             drop_last=True,
-            prefetch_factor=3
+            prefetch_factor=2
         )
 
     def val_dataloader(self):
@@ -252,7 +281,7 @@ class DiscoverCIFARDataModule(pl.LightningDataModule):
                 num_workers=self.num_workers,
                 pin_memory=True,
                 drop_last=False,
-                prefetch_factor=3
+                prefetch_factor=2
             )
             for dataset in self.val_datasets
         ]
@@ -270,6 +299,9 @@ class DiscoverShipDataModule(pl.LightningDataModule):
         #self.dataset_class = getattr(torchvision.datasets, 'CIFAR10')
         self.transform_train = get_transforms("unsupervised", args.dataset, args.num_views)
         self.transform_val = get_transforms("eval", args.dataset, args.num_views)
+        self.class_names = CLASS_NAMES
+        #self.class_index = list(dict(list(zip(range(len(self.class_names)), self.class_names))).keys())
+        #self.labeled_advanced_inds=np.array(SHIP_ADVANCED_INDS)
 
     def prepare_data(self):
         pass
@@ -278,10 +310,18 @@ class DiscoverShipDataModule(pl.LightningDataModule):
 
     def setup(self, stage=None):
         from copy import copy
+
+        assert len(self.class_names) > self.num_labeled_classes
+
         labeled_classes = range(self.num_labeled_classes)
         unlabeled_classes = range(
             self.num_labeled_classes, self.num_labeled_classes + self.num_unlabeled_classes
         )
+        # labeled_classes = self.labeled_advanced_inds[np.arange(self.num_labeled_classes)]
+        # unlabeled_classes = self.labeled_advanced_inds[np.arange(
+        #     self.num_labeled_classes, self.num_labeled_classes + self.num_unlabeled_classes
+        # )]
+
         N = len(self.dataset)
         train_size = int(N * 0.8)
         val_size = int(N * 0.1)
@@ -330,43 +370,59 @@ class DiscoverShipDataModule(pl.LightningDataModule):
 
     def make_weights_for_balanced_classes(self,dataset, nclasses):
         count = [0] * nclasses
-        for item in dataset:
+        weight = [0] * len(dataset)
+        val_list = [0] * len(dataset)
+        # tmp_dataset=dataset
+        # while isinstance(tmp_dataset,torch.utils.data.dataset.Subset):
+        #     tmp_dataset=tmp_dataset.dataset
+        # td=torch.utils.data.Subset(dataset,[0,1,2])
+        for idx, item in enumerate(tqdm(dataset)):
+            # label=dataset[i][1]
             count[item[1]] += 1
+            val_list[idx] = item[1]
         weight_per_class = [0.] * nclasses
         N = float(sum(count))
         for i in range(nclasses):
             weight_per_class[i] = N / float(count[i])
-        weight = [0] * len(dataset)
-        for idx, val in enumerate(dataset):
-            weight[idx] = weight_per_class[val[1]]
+
+        for idx, val in enumerate(tqdm(val_list)):
+            #weight[idx] = weight_per_class[val[1]]
+            weight[idx] = weight_per_class[val_list[idx]]
         return weight
 
-    def train_dataloader(self):
+    def train_dataloader(self,balanced=False):
         # from tqdm import tqdm
         # coll=[0]*(self.num_labeled_classes+self.num_unlabeled_classes)
         # for item in tqdm(self.train_dataset):
         #     coll[item[1]]+=1
+        if balanced:
+            weights = self.make_weights_for_balanced_classes(self.train_dataset, self.num_labeled_classes+self.num_unlabeled_classes)
+            weights = torch.DoubleTensor(weights)
+            sampler = WeightedRandomSampler(weights, len(weights), replacement=True)
+            return DataLoader(
+                self.train_dataset,
+                batch_size=self.batch_size,
+                sampler=sampler,
+                #shuffle=True,
+                num_workers=self.num_workers,
+                pin_memory=True,
+                drop_last=True,
+                prefetch_factor=2)
+        else:
+            return DataLoader(
+                self.train_dataset,
+                batch_size=self.batch_size,
+                #sampler=sampler,
+                shuffle=True,
+                num_workers=self.num_workers,
+                pin_memory=True,
+                drop_last=True,
+                prefetch_factor=2)
 
-        weights = self.make_weights_for_balanced_classes(self.train_dataset, self.num_labeled_classes+self.num_unlabeled_classes)
-        weights = torch.DoubleTensor(weights)
-        sampler = WeightedRandomSampler(weights, len(weights), replacement=True)
-        return DataLoader(
-            self.train_dataset,
-            batch_size=self.batch_size,
-            sampler=sampler,
-            #shuffle=True,
-            num_workers=self.num_workers,
-            pin_memory=True,
-            drop_last=True,
-            prefetch_factor=3
-        )
 
     def val_dataloader(self):
         dataloader_list=[]
         for dataset in self.val_datasets:
-            # weights = self.make_weights_for_balanced_classes(self.train_dataset.imgs, len(self.train_dataset.classes))
-            # weights = torch.DoubleTensor(weights)
-            # sampler = WeightedRandomSampler(weights, len(weights), replacement=True)
             dataloader_list.append(
                 DataLoader(
                 dataset,
@@ -375,7 +431,7 @@ class DiscoverShipDataModule(pl.LightningDataModule):
                 num_workers=self.num_workers,
                 pin_memory=True,
                 drop_last=False,
-                prefetch_factor=3))
+                prefetch_factor=2))
 
         return dataloader_list
 
@@ -694,7 +750,7 @@ class DiscoverImageNetDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=True,
             drop_last=True,
-            prefetch_factor=3
+            prefetch_factor=2
         )
 
     def val_dataloader(self):
@@ -706,7 +762,7 @@ class DiscoverImageNetDataModule(pl.LightningDataModule):
                 num_workers=self.num_workers,
                 pin_memory=True,
                 drop_last=False,
-                prefetch_factor=3
+                prefetch_factor=2
             )
             for dataset in self.val_datasets
         ]
@@ -766,7 +822,7 @@ class PretrainImageNetDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=True,
             drop_last=True,
-            prefetch_factor=3
+            prefetch_factor=2
         )
 
     def val_dataloader(self):
@@ -777,5 +833,5 @@ class PretrainImageNetDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=True,
             drop_last=False,
-            prefetch_factor=3
+            prefetch_factor=2
         )

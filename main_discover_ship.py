@@ -19,7 +19,7 @@ parser = ArgumentParser()
 parser.add_argument("--dataset", default="ship", type=str, help="dataset")
 parser.add_argument("--imagenet_split", default="A", type=str, help="imagenet split [A,B,C]")
 parser.add_argument("--download", default=False, action="store_true", help="wether to download")
-parser.add_argument("--data_dir", default="datasets/Classification", type=str, help="data directory")
+parser.add_argument("--data_dir", default="datasets/Classification_advanced", type=str, help="data directory")
 parser.add_argument("--log_dir", default="logs", type=str, help="log directory")
 parser.add_argument("--batch_size", default=256, type=int, help="batch size")
 parser.add_argument("--num_workers", default=16, type=int, help="number of workers")
@@ -32,21 +32,21 @@ parser.add_argument("--warmup_epochs", default=10, type=int, help="warmup epochs
 parser.add_argument("--proj_dim", default=256, type=int, help="projected dim")
 parser.add_argument("--hidden_dim", default=2048, type=int, help="hidden dim in proj/pred head")
 parser.add_argument("--overcluster_factor", default=3, type=int, help="overclustering factor")
-parser.add_argument("--num_heads", default=5, type=int, help="number of heads for clustering")
+parser.add_argument("--num_heads", default=4, type=int, help="number of heads for clustering")
 parser.add_argument("--num_hidden_layers", default=1, type=int, help="number of hidden layers")
 parser.add_argument("--num_iters_sk", default=3, type=int, help="number of iters for Sinkhorn")
 parser.add_argument("--epsilon_sk", default=0.05, type=float, help="epsilon for the Sinkhorn")
 parser.add_argument("--num_views", default=2, type=int, help="number of views")
 parser.add_argument("--temperature", default=0.1, type=float, help="softmax temperature")
-parser.add_argument("--comment", default='ship_10_5', type=str)
+parser.add_argument("--comment", default='ship_14_1', type=str)
 parser.add_argument("--project", default="UNO", type=str, help="wandb project")
 parser.add_argument("--entity", default='chfjj', type=str, help="wandb entity")
 parser.add_argument("--offline", default=False, action="store_true", help="disable wandb")
-parser.add_argument("--num_labeled_classes", default=10, type=int, help="number of labeled classes")
-parser.add_argument("--num_unlabeled_classes", default=5, type=int, help="number of unlab classes")
+parser.add_argument("--num_labeled_classes", default=14, type=int, help="number of labeled classes")
+parser.add_argument("--num_unlabeled_classes", default=1, type=int, help="number of unlab classes")
 
-parser.add_argument("--pretrained", default=None,type=str, help="pretrained checkpoint path")
-# parser.add_argument("--pretrained", default='checkpoints/epoch=250-step=48944.ckpt',type=str, help="pretrained checkpoint path")
+# parser.add_argument("--pretrained", default=None,type=str, help="pretrained checkpoint path")
+parser.add_argument("--pretrained", default='checkpoints/epoch=2-step=803_ship14_1.ckpt',type=str, help="pretrained checkpoint path")
 #parser.add_argument("--gpus",default=1,type=int,help="number of gpus")
 
 class Discoverer(pl.LightningModule):
@@ -57,7 +57,7 @@ class Discoverer(pl.LightningModule):
         # build model
         self.model = MultiHeadResNet(
             arch=self.hparams.arch,
-            low_res="CIFAR" in self.hparams.dataset,
+            low_res="CIFAR" in self.hparams.dataset or "ship" in self.hparams.dataset,
             num_labeled=self.hparams.num_labeled_classes,
             num_unlabeled=self.hparams.num_unlabeled_classes,
             proj_dim=self.hparams.proj_dim,
@@ -269,12 +269,13 @@ def main(args):
     model = Discoverer(**args.__dict__)
     trainer = pl.Trainer.from_argparse_args(args, logger=wandb_logger)
     trainer.fit(model, dm)
-    torch.save(model,'final_model.pth')
+    torch.save(model,'final_model%s.pth'%(args.comment))
 
 
 if __name__ == "__main__":
     parser = pl.Trainer.add_argparse_args(parser)
     args = parser.parse_args()
     args.num_classes = args.num_labeled_classes + args.num_unlabeled_classes
+    # args.gpus = 1
     #args.max_epochs=2
     main(args)

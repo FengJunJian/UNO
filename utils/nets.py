@@ -138,8 +138,8 @@ class MultiHeadResNet(nn.Module):
     def forward_heads(self, feats):
         out = {"logits_lab": self.head_lab(feats)}
         if getattr(self, "head_unlab", False):
-            logits_unlab, proj_feats_unlab = self.head_unlab(feats)#[prototypes_(z)_stack , z_stack] #logits , proj [n,num_heads, num_hidden,num_classes]
-            logits_unlab_over, proj_feats_unlab_over = self.head_unlab_over(feats)
+            logits_unlab, proj_feats_unlab = self.head_unlab(feats)#[prototypes_(z)_stack , z_stack] #logits: [n,num_heads, proj_dim,num_classes], proj:[n,num_heads, proj_dim,proj_dim]
+            logits_unlab_over, proj_feats_unlab_over = self.head_unlab_over(feats)#
             out.update(
                 {
                     "logits_unlab": logits_unlab,
@@ -159,7 +159,7 @@ class MultiHeadResNet(nn.Module):
                 out_dict[key] = torch.stack([o[key] for o in out])
             return out_dict
         else:
-            feats = F.normalize(self.encoder(views))
+            feats = F.normalize(self.encoder(views))#(proj_dim,512)
             out = self.forward_heads(feats)
             out["feats"] = feats
             return out

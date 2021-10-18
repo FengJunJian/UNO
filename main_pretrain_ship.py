@@ -17,7 +17,7 @@ import wandb
 parser = ArgumentParser()
 parser.add_argument("--dataset", default="ship", type=str, help="dataset")
 parser.add_argument("--download", default=True, action="store_true", help="wether to download")
-parser.add_argument("--data_dir", default="datasets/Classification", type=str, help="data directory")
+parser.add_argument("--data_dir", default="datasets/Classification_advanced", type=str, help="data directory")
 parser.add_argument("--log_dir", default="logs", type=str, help="log directory")
 parser.add_argument("--checkpoint_dir", default="checkpoints", type=str, help="checkpoint dir")
 parser.add_argument("--batch_size", default=256, type=int, help="batch size")
@@ -30,12 +30,12 @@ parser.add_argument("--weight_decay_opt", default=1.0e-4, type=float, help="weig
 parser.add_argument("--warmup_epochs", default=10, type=int, help="warmup epochs")
 parser.add_argument("--num_views", default=2, type=int, help="number of views")
 parser.add_argument("--temperature", default=0.1, type=float, help="softmax temperature")
-parser.add_argument("--comment", default='ship_10_5', type=str)
+parser.add_argument("--comment", default='ship_14_1', type=str)
 parser.add_argument("--project", default="UNO", type=str, help="wandb project")
 parser.add_argument("--entity", default="chfjj", type=str, help="wandb entity")
 parser.add_argument("--offline", default=False, action="store_true", help="disable wandb")
-parser.add_argument("--num_labeled_classes", default=10, type=int, help="number of labeled classes")
-parser.add_argument("--num_unlabeled_classes", default=5, type=int, help="number of unlab classes")
+parser.add_argument("--num_labeled_classes", default=14, type=int, help="number of labeled classes")
+parser.add_argument("--num_unlabeled_classes", default=1, type=int, help="number of unlab classes")
 parser.add_argument("--pretrained", type=str, default=None, help="pretrained checkpoint path")
 
 class Pretrainer(pl.LightningModule):
@@ -46,7 +46,7 @@ class Pretrainer(pl.LightningModule):
         # build model
         self.model = MultiHeadResNet(
             arch=self.hparams.arch,
-            low_res="CIFAR" in self.hparams.dataset,
+            low_res="CIFAR" in self.hparams.dataset or "ship" in self.hparams.dataset,
             num_labeled=self.hparams.num_labeled_classes,
             num_unlabeled=self.hparams.num_unlabeled_classes,
             num_heads=None,
@@ -122,7 +122,7 @@ class Pretrainer(pl.LightningModule):
 def main(args):
     # build datamodule
     dm = get_datamodule(args, "pretrain")
-    #dm.setup()
+    dm.setup()
     # td=dm.train_dataloader()
     # vd=dm.val_dataloader()
 
@@ -149,5 +149,6 @@ def main(args):
 if __name__ == "__main__":
     parser = pl.Trainer.add_argparse_args(parser)
     args = parser.parse_args()
-    #args.max_epochs=5
+    # args.gpus=1
+    # args.max_epochs=5
     main(args)

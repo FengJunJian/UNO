@@ -30,7 +30,7 @@ class SinkhornKnopp(torch.nn.Module):
     def iterate(self, Q):
         Q = shoot_infs(Q)
         sum_Q = torch.sum(Q)
-        Q /= sum_Q
+        Q /= sum_Q #归一化
         r = torch.ones(Q.shape[0]).cuda(non_blocking=True) / Q.shape[0]
         c = torch.ones(Q.shape[1]).cuda(non_blocking=True) / Q.shape[1]
         for it in range(self.num_iters):
@@ -44,7 +44,7 @@ class SinkhornKnopp(torch.nn.Module):
     @torch.no_grad()
     def forward(self, logits):
         # get assignments
-        q = logits / self.epsilon
+        q = logits / self.epsilon #logits shape()
         M = torch.max(q)
         q -= M
         q = torch.exp(q).t()
