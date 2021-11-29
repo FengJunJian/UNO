@@ -11,6 +11,7 @@ from utils.eval import ClusterMetrics
 from utils.sinkhorn_knopp import SinkhornKnopp
 
 import numpy as np
+import os
 from argparse import ArgumentParser
 from datetime import datetime
 
@@ -39,9 +40,9 @@ parser.add_argument("--epsilon_sk", default=0.05, type=float, help="epsilon for 
 parser.add_argument("--num_views", default=2, type=int, help="number of views")
 parser.add_argument("--temperature", default=0.1, type=float, help="softmax temperature")
 parser.add_argument("--comment", default='ship_14_1', type=str)
-parser.add_argument("--project", default="UNO", type=str, help="wandb project")
+parser.add_argument("--project", default="UNO1", type=str, help="wandb project")
 parser.add_argument("--entity", default='chfjj', type=str, help="wandb entity")
-parser.add_argument("--offline", default=False, action="store_true", help="disable wandb")
+parser.add_argument("--offline", default=True, action="store_true", help="disable wandb")
 parser.add_argument("--num_labeled_classes", default=14, type=int, help="number of labeled classes")
 parser.add_argument("--num_unlabeled_classes", default=1, type=int, help="number of unlab classes")
 
@@ -269,7 +270,12 @@ def main(args):
     model = Discoverer(**args.__dict__)
     trainer = pl.Trainer.from_argparse_args(args, logger=wandb_logger)
     trainer.fit(model, dm)
-    torch.save(model,'final_model%s.pth'%(args.comment))
+    savedir=args.comment
+    if not os.path.exists(savedir):
+        os.mkdir(savedir)
+        torch.save(model.state_dict(),os.path.join(savedir,'final_model.pth'))#%(args.comment)
+
+
 
 
 if __name__ == "__main__":

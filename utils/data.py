@@ -28,6 +28,7 @@ CLASS_NAMES=['Boat',  # 0
            'vessel'  # 14
            ]
 SHIP_ADVANCED_INDS=[14,0,1,2,3,4,5,7,8,9,10,11,12,13,6]
+
 def get_datamodule(args, mode):
 
     if mode == "pretrain":
@@ -117,17 +118,18 @@ class PretrainShipDataModule(pl.LightningDataModule):
         #self.dataset_class = getattr(torchvision.datasets, 'CIFAR10')
         self.dataset= torchvision.datasets.ImageFolder(self.data_dir)#transform=transforms.ToTensor()
         self.transform_train = get_transforms("unsupervised", args.dataset, args.num_views)
+        self.transform_train_supervised = get_transforms("supervised", args.dataset, args.num_views)
         self.transform_val = get_transforms("eval", args.dataset, args.num_views)
         self.class_names = CLASS_NAMES
         #self.class_index = list(dict(list(zip(range(len(self.class_names)), self.class_names))).keys())
-        #self.labeled_advanced_inds=np.array(SHIP_ADVANCED_INDS)
+
 
     def prepare_data(self):
         pass
         # self.dataset_class(os.path.join(self.data_dir,'..'), train=True, download=self.download)
         # self.dataset_class(os.path.join(self.data_dir,'..'), train=False, download=self.download)
 
-    def setup(self, stage=None):
+    def setup(self, stage=None,eval_falg=False):
         from copy import copy
         #self.train_dataset1 = self.dataset_class(os.path.join(self.data_dir,'..'), train=True, transform=self.transform_train)
         assert len(self.class_names)>self.num_labeled_classes
@@ -144,7 +146,10 @@ class PretrainShipDataModule(pl.LightningDataModule):
         trainDataset.dataset=copy(self.dataset)
         # train dataset
         self.train_dataset = trainDataset
-        self.train_dataset.dataset.transform = self.transform_train
+        if eval_falg:
+            self.train_dataset.dataset.transform = self.transform_train_supervised
+        else:
+            self.train_dataset.dataset.transform = self.transform_train
         subTarget=np.array(self.train_dataset.dataset.targets)[np.array(self.train_dataset.indices)]
         train_indices_lab = np.where(
             np.isin(subTarget, labeled_classes)
@@ -160,38 +165,70 @@ class PretrainShipDataModule(pl.LightningDataModule):
         self.val_dataset = torch.utils.data.Subset(self.val_dataset, val_indices_lab)
 
     def make_weights_for_balanced_classes(self,dataset, nclasses):
+        import pickle as pkl
         count = [0] * nclasses
         weight = [0] * len(dataset)
         val_list = [0] * len(dataset)
+        cache_pkl=os.path.join(os.path.dirname(self.data_dir), 'cache')
 
-        for idx, item in enumerate(tqdm(dataset)):
-            # label=dataset[i][1]
-            count[item[1]] += 1
-            val_list[idx] = item[1]
-        weight_per_class = [0.] * nclasses
-        N = float(sum(count))
-        for i in range(nclasses):
-            weight_per_class[i] = N / float(count[i])
+        cache_basename=os.path.basename(self.data_dir)
+        cache_pkl_file = os.path.join(cache_pkl, cache_basename+'%d_%d.pkl'%(self.num_labeled_classes,self.num_unlabeled_classes))
+        if not os.path.exists(cache_pkl):
+            os.mkdir(cache_pkl)
 
-        for idx, val in enumerate(tqdm(val_list)):
-            weight[idx] = weight_per_class[val_list[idx]]
+        if os.path.exists(cache_pkl_file):
+            with open(cache_pkl_file,'rb') as f:
+                weight_data=pkl.load(f)
+                count=weight_data['count']
+                val_list = weight_data['val_list']
+            #(os.path.join(cache_pkl, cache_basename + '.pkl'))
+        else:
+            for idx, item in enumerate(tqdm(dataset)):
+                # label=dataset[i][1]
+                count[item[1]] += 1
+                val_list[idx] = item[1]
+            with open(cache_pkl_file,'wb') as f:
+                pkl.dump({'count':count,'val_list':val_list},f)
+
+            weight_per_class = [0.] * nclasses
+            N = float(sum(count))
+            for i in range(nclasses):
+                try:
+                    weight_per_class[i] = N / float(count[i])
+                except ZeroDivisionError as e:
+                    weight_per_class[i]=1.0
+                    print(e)
+
+            for idx, val in enumerate(tqdm(val_list)):
+                weight[idx] = weight_per_class[val_list[idx]]
+
         return weight
 
 
-    def train_dataloader(self):
-        weights = self.make_weights_for_balanced_classes(self.train_dataset, self.num_labeled_classes)
-        weights = torch.DoubleTensor(weights)
-        sampler = WeightedRandomSampler(weights, len(weights), replacement=True)
-        return DataLoader(
-            self.train_dataset,
-            batch_size=self.batch_size,
-            sampler=sampler,
-            #shuffle=True,
-            num_workers=self.num_workers,
-            pin_memory=True,
-            drop_last=True,
-            prefetch_factor=2
-        )
+    def train_dataloader(self,balanced=True):
+        if balanced:
+            weights = self.make_weights_for_balanced_classes(self.train_dataset, self.num_labeled_classes+self.num_unlabeled_classes)
+            weights = torch.DoubleTensor(weights)
+            sampler = WeightedRandomSampler(weights, len(weights), replacement=True)
+            return DataLoader(
+                self.train_dataset,
+                batch_size=self.batch_size,
+                sampler=sampler,
+                #shuffle=True,
+                num_workers=self.num_workers,
+                pin_memory=True,
+                drop_last=True,
+                prefetch_factor=2)
+        else:
+            return DataLoader(
+                self.train_dataset,
+                batch_size=self.batch_size,
+                #sampler=sampler,
+                shuffle=True,
+                num_workers=self.num_workers,
+                pin_memory=True,
+                drop_last=True,
+                prefetch_factor=2)
 
     def val_dataloader(self):
         return DataLoader(

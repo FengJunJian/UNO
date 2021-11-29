@@ -40,7 +40,6 @@ def drawDiffClass(x,y,colors):
                     edgecolors='k')  # sns.color_palette(palettes[0])
 
 
-
 def get_n_hls_colors(num):
     hls_colors = []
     i = 0
@@ -68,5 +67,9 @@ def ncolors(num):
 
     return rgb_colors
 
-
-
+def softmax(x, axis=None):
+    x = x - x.max(axis=axis, keepdims=True)
+    y = np.exp(x)
+    return y / y.sum(axis=axis, keepdims=True)
+def norm1(x,axis=None):
+    return x / x.sum(axis=axis, keepdims=True)

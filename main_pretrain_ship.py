@@ -12,6 +12,7 @@ from utils.callbacks import PretrainCheckpointCallback
 from argparse import ArgumentParser
 from datetime import datetime
 import wandb
+import os
 #wandb.init(project='UNO',entity='chfjj')
 
 parser = ArgumentParser()
@@ -30,11 +31,11 @@ parser.add_argument("--weight_decay_opt", default=1.0e-4, type=float, help="weig
 parser.add_argument("--warmup_epochs", default=10, type=int, help="warmup epochs")
 parser.add_argument("--num_views", default=2, type=int, help="number of views")
 parser.add_argument("--temperature", default=0.1, type=float, help="softmax temperature")
-parser.add_argument("--comment", default='ship_14_1', type=str)
-parser.add_argument("--project", default="UNO", type=str, help="wandb project")
+parser.add_argument("--comment", default='ship_13_1', type=str)
+parser.add_argument("--project", default="UNO1", type=str, help="wandb project")
 parser.add_argument("--entity", default="chfjj", type=str, help="wandb entity")
-parser.add_argument("--offline", default=False, action="store_true", help="disable wandb")
-parser.add_argument("--num_labeled_classes", default=14, type=int, help="number of labeled classes")
+parser.add_argument("--offline", default=True, action="store_true", help="disable wandb")
+parser.add_argument("--num_labeled_classes", default=13, type=int, help="number of labeled classes")
 parser.add_argument("--num_unlabeled_classes", default=1, type=int, help="number of unlab classes")
 parser.add_argument("--pretrained", type=str, default=None, help="pretrained checkpoint path")
 
@@ -58,6 +59,9 @@ class Pretrainer(pl.LightningModule):
 
         # metrics
         self.accuracy = Accuracy()
+
+    def forward(self, x):
+        return self.model(x)
 
     def configure_optimizers(self):
         optimizer = torch.optim.SGD(
@@ -118,13 +122,16 @@ class Pretrainer(pl.LightningModule):
         self.log_dict(results, on_step=False, on_epoch=True)
         return results
 
-
 def main(args):
     # build datamodule
     dm = get_datamodule(args, "pretrain")
     dm.setup()
+    #dataloader = dm.train_dataloader(False)
+    #valdataloaders = dm.val_dataloader()  # [val_subset_unlab_train, val_subset_unlab_test, val_s
     # td=dm.train_dataloader()
     # vd=dm.val_dataloader()
+    # di = iter(dataloader)
+    # datas,targets=next(di)
 
     # logger
     run_name = "-".join(["pretrain", args.arch, args.dataset, args.comment])
@@ -144,6 +151,10 @@ def main(args):
         args, logger=wandb_logger, callbacks=[PretrainCheckpointCallback()]
     )
     trainer.fit(model, dm)
+    savedir = args.comment
+    if not os.path.exists(savedir):
+        os.mkdir(savedir)
+        torch.save(model.state_dict(), os.path.join(savedir, 'pretrain_model_%d.pth'%(args.max_epochs)))  # %(args.comment)
 
 
 if __name__ == "__main__":
