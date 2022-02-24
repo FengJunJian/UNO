@@ -98,7 +98,7 @@ class MultiHeadResNet(nn.Module):
         if low_res:
             self.encoder.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
             self.encoder.maxpool = nn.Identity()
-            self._reinit_all_layers()
+            self._reinit_all_layers()#初始化
 
         self.head_lab = Prototypes(self.feat_dim, num_labeled)#
         if num_heads is not None:

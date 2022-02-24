@@ -74,7 +74,7 @@ class Discoverer(pl.LightningModule):
 
         # Sinkorn-Knopp
         self.sk = SinkhornKnopp(
-            num_iters=self.hparams.num_iters_sk, epsilon=self.hparams.epsilon_sk
+            num_iters=self.hparams.num_iters_sk, epsilon=self.hparams.epsilon_sk#3,0.05
         )
 
         # metrics
@@ -144,7 +144,7 @@ class Discoverer(pl.LightningModule):
         nlc = self.hparams.num_labeled_classes
 
         # normalize prototypes
-        self.model.normalize_prototypes()
+        self.model.normalize_prototypes()#单位圆
 
         # forward
         outputs = self.model(views)
@@ -256,7 +256,7 @@ class Discoverer(pl.LightningModule):
 
 def main(args):
     dm = get_datamodule(args, "discover")
-    # dm.setup()
+    dm.setup()
 
     run_name = "-".join(["discover", args.arch, args.dataset, args.comment])
     wandb_logger = pl.loggers.WandbLogger(
@@ -273,7 +273,7 @@ def main(args):
     savedir=args.comment
     if not os.path.exists(savedir):
         os.mkdir(savedir)
-        torch.save(model.state_dict(),os.path.join(savedir,'final_model.pth'))#%(args.comment)
+    torch.save(model.state_dict(),os.path.join(savedir,'discover_model_0%d.pth'%(args.max_epochs)))#%(args.comment)
 
 
 

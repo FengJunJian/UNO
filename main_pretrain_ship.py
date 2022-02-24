@@ -154,7 +154,7 @@ def main(args):
     savedir = args.comment
     if not os.path.exists(savedir):
         os.mkdir(savedir)
-        torch.save(model.state_dict(), os.path.join(savedir, 'pretrain_model_%d.pth'%(args.max_epochs)))  # %(args.comment)
+    torch.save(model.state_dict(), os.path.join(savedir, 'pretrain_model_0%d.pth'%(args.max_epochs)))  # %(args.comment)
 
 
 if __name__ == "__main__":

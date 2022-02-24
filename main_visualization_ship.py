@@ -17,7 +17,7 @@ from tqdm import tqdm
 import os
 from mytools import t_sne_projection,dataset_visualization
 from collections import Counter
-
+from matplotlib.pyplot import hist
 
 parser = ArgumentParser()
 parser.add_argument("--dataset", default="ship", type=str, help="dataset")
@@ -49,7 +49,7 @@ parser.add_argument("--offline", default=True, action="store_true", help="disabl
 parser.add_argument("--num_labeled_classes", default=13, type=int, help="number of labeled classes")
 parser.add_argument("--num_unlabeled_classes", default=1, type=int, help="number of unlab classes")
 
-parser.add_argument("--pretrained", default='ship_13_1/pretrain_model_60.pth',type=str, help="pretrained checkpoint path")#checkpoints/epoch=29-step=8039_ship13_2.ckpt 'checkpoints/pretrain-resnet18-ship-ship_13_1.cp'
+parser.add_argument("--pretrained", default='ship_13_1/pretrain_model_30.cp',type=str, help="pretrained checkpoint path")#checkpoints/epoch=29-step=8039_ship13_2.ckpt 'checkpoints/pretrain-resnet18-ship-ship_13_1.cp'
 parser.add_argument("--checkpoints", default='ship_13_1/final_modelship.pth',type=str, help="checkpoint path")
 
 # parser.add_argument("--dataset", default="ship", type=str, help="dataset")
@@ -381,16 +381,16 @@ class Discoverer(pl.LightningModule):
                 self.log(prefix_inc + "/acc", result_inc)
 
 def main_discover(args):
-    dm = get_datamodule(args, "discover")
-    dm.setup()
+    dm = get_datamodule(args, "pretrain")
+    dm.setup_eval()
     dataloader=dm.train_dataloader(False)
-    valdataloaders=dm.val_dataloader()#[val_subset_unlab_train, val_subset_unlab_test, val_subset_lab_test]
+    valdataloaders=dm.val_dataloader()#
 
     model = Discoverer(**args.__dict__)
 
     state_dict = torch.load(args.checkpoints)#  epoch=29-step=5849.ckpt
     model.load_state_dict(state_dict)
-
+    model.eval()
     # di = iter(dataloader)
     # datas,targets=next(di)
     saveDir=args.comment
@@ -398,9 +398,12 @@ def main_discover(args):
     if not os.path.exists(saveDir):
         os.mkdir(saveDir)
 
-    fea_total=np.empty((0,768),np.float32)#256+512
-    tar_total=np.empty(0,np.int64)
     if True:
+        print("discover: train set!")
+        fea_total = np.empty((0, 768), np.float32)  # 256+512
+        tar_total = np.empty(0, np.int64)
+        pre_total = np.empty(0, np.int64)
+        fea_label = np.empty((0, 512), np.float32)  # 512
         for i,(datas,targets) in enumerate(tqdm(dataloader)):
             result=model(datas)
             preds = result["logits_unlab"]
@@ -418,29 +421,36 @@ def main_discover(args):
             #collections.Counter(preds_inc)
             pp=[Counter(p).most_common(1)[0][0] for p in preds_inc.numpy()]#统计出现次数最多的标签
             pp=np.array(pp)
-            f=result['feats'].max(0)[0]
-            pfu = result['proj_feats_unlab'].max(0)[0].max(0)[0]
+            # f=result['feats'].max(0)[0]
+            f = result['feats'][0]
+            # pfu = result['proj_feats_unlab'].max(0)[0].max(0)[0]
+            pfu = result['proj_feats_unlab'][0].max(0)[0]
             cat_fea = torch.cat([f, pfu], dim=1).detach().numpy()
             #
             t=targets.numpy()
             fea_total=np.concatenate([fea_total,cat_fea],axis=0)
+            fea_label=np.concatenate([fea_label,f.detach().numpy()],axis=0)
             tar_total=np.concatenate([tar_total,t],axis=0)
-
+            pre_total = np.concatenate([pre_total, pp], axis=0)
             print(float(np.equal(pp, t).sum()) / args.batch_size)
 
-        np.savez(os.path.join(saveDir,'proj_numpy_ship'), x=fea_total, y=tar_total)
+        np.savez(os.path.join(saveDir,'proj_numpy_ship1'), x=fea_total, x_label=fea_label,y=tar_total,y_p=pre_total)
+        # np.savez(os.path.join(saveDir, 'proj_numpy_ship_label'), , y=tar_total,y_p=pre_total)
         # t_sne_projection(fea_total, tar_total)
-
         #keys: 'feats', 'logits_lab', 'logits_unlab', 'proj_feats_unlab', 'logits_unlab_over', 'proj_feats_unlab_over'
-
-    cat_fea_total=np.empty((0,768),np.float32)
-    cat_fea_target_total=np.empty(0,np.int64)
-    for in_dataloader,valdataloader in enumerate(valdataloaders):
-        cat_fea_sub = np.empty((0, 768), np.float32)
-        cat_fea_target_sub = np.empty(0, np.int64)
-        for i,(val_datas,val_targets) in enumerate(tqdm(valdataloader)):
+    if True:#
+        print("discover: test set!")
+        cat_fea_total=np.empty((0,768),np.float32)
+        cat_fea_label = np.empty((0, 512), np.float32)  # 512
+        cat_fea_target_total=np.empty(0,np.int64)
+        cat_fea_predict_total = np.empty(0, np.int64)
+        for i,(val_datas,val_targets) in enumerate(valdataloaders):
+            # cat_fea_sub = np.empty((0, 768), np.float32)
+            # cat_fea_target_sub = np.empty(0, np.int64)
+            # cat_fea_predict_sub = np.empty(0, np.int64)
+            #for i,(val_datas,val_targets) in enumerate(tqdm(valdataloader)):
             result=model(val_datas)
-            preds = result["logits_unlab"]
+            #preds = result["logits_unlab"]
             preds_inc = torch.cat(
                 [
                     result["logits_lab"].unsqueeze(0).expand( args.num_heads, -1, -1),
@@ -448,42 +458,48 @@ def main_discover(args):
                 ],
                 dim=-1,
             )
-            preds = preds.max(dim=-1)[1]
-            preds_inc = preds_inc.max(dim=-1)[1]
-            preds_inc = preds_inc.permute((1,0))
+            #preds = preds.max(dim=-1)[1]
+            preds_inc1 = preds_inc.max(dim=-1)[1]
+            preds_inc1 = preds_inc1.permute((1,0))
             #preds_inc = torch.reshape(preds_inc, (preds_inc.shape[0], -1))
 
-            pp = [Counter(p).most_common(1)[0][0] for p in preds_inc.numpy()]
+            pp = [Counter(p).most_common(1)[0][0] for p in preds_inc1.numpy()]
             pp = np.array(pp)
             f=result['feats']#.detach().numpy()
             pfu,_= result['proj_feats_unlab'].max(0)
             # pfu_n = pfu.detach().numpy()
             cat_fea=torch.cat([f,pfu],dim=1).detach().numpy()
             t = val_targets.numpy()
-            cat_fea_sub=np.concatenate([cat_fea_sub, cat_fea],axis=0)
-            cat_fea_target_sub = np.concatenate([cat_fea_target_sub, t], axis=0)
-            print(float(np.equal(pp,t).sum())/args.batch_size)
+            if len(np.where(t==13)[0])!=0:
+                a=np.where(pp==13)[0]
+                b=np.where(t == 13)[0]
+                print('predict',a)
+                print('target',b)
+                print("there is cls 13!")
+            #cat_fea_sub=np.concatenate([cat_fea_sub, cat_fea],axis=0)
+            #cat_fea_target_sub = np.concatenate([cat_fea_target_sub, t], axis=0)
+            #cat_fea_predict_sub=np.concatenate([cat_fea_predict_sub,pp],axis=0)
+            # np.savez(os.path.join(saveDir,'proj_numpy_test_ship' + str(in_dataloader)), x=cat_fea_sub, y=cat_fea_target_sub,y_p=cat_fea_predict_sub)
+            cat_fea_total = np.concatenate([cat_fea_total, cat_fea], axis=0)
+            cat_fea_label = np.concatenate([cat_fea_label, f.detach().numpy()], axis=0)
+            cat_fea_target_total = np.concatenate([cat_fea_target_total, t], axis=0)
+            cat_fea_predict_total=np.concatenate([cat_fea_predict_total,pp],axis=0)
+            print(float(np.equal(pp, t).sum()) / args.batch_size)
 
-        np.savez(os.path.join(saveDir,'proj_numpy_test_ship' + str(in_dataloader)), x=cat_fea_sub, y=cat_fea_target_sub)
-        cat_fea_total = np.concatenate([cat_fea_total, cat_fea_sub], axis=0)
-        cat_fea_target_total = np.concatenate([cat_fea_target_total, cat_fea_target_sub], axis=0)
-
-    np.savez(os.path.join(saveDir,'proj_numpy_test_ship'), x=cat_fea_total, y=cat_fea_target_total)
-    # t_sne_projection(cat_fea_total, cat_fea_target_total)
-    #trainer = pl.Trainer.from_argparse_args(args, logger=wandb_logger)
-    #trainer.fit(model, dm)
-
+        np.savez(os.path.join(saveDir,'proj_numpy_test_ship'), x=cat_fea_total,x_label=cat_fea_label ,y=cat_fea_target_total,y_p=cat_fea_predict_total)
+    #     np.savez(os.path.join(saveDir, 'proj_numpy_test_ship_label'), , y=cat_fea_target_total, y_p=cat_fea_predict_total)
+    # # t_sne_projection(cat_fea_total, cat_fea_target_total)
 
 def main_pretrain(args):
 
-    pretrain_comment='pretrain60'
+    pretrain_comment='pretrain30'
     dm = get_datamodule(args, "pretrain")
-    dm.setup(eval_falg=False)
+    dm.setup_eval()
     dataloader=dm.train_dataloader(False)
     valdataloaders=dm.val_dataloader()#[val_subset_unlab_train, val_subset_unlab_test, val_subset_lab_test]
 
     model = Pretrainer(**args.__dict__)
-    #model.eval()
+    model.eval()
     #state_dict = torch.load(args.pretrained)#  epoch=29-step=5849.ckpt
     #model.load_state_dict(state_dict['state_dict'])
 
@@ -494,79 +510,63 @@ def main_pretrain(args):
     if not os.path.exists(saveDir):
         os.mkdir(saveDir)
 
-    if False:
+    if True:
+        print("pretrain: train set!")
         fea_total=np.empty((0,512),np.float32)#256+512
         tar_total=np.empty(0,np.int64)
+        pre_total = np.empty(0, np.int64)
         if True:
             for i,(datas,targets) in enumerate(tqdm(dataloader)):
                 result=model(datas)
                 #preds = result["logits_unlab"]
                 # pp=result['logits_lab'].argmax(-1)
                 # p_label = [Counter(p).most_common(1)[0][0] for p in pp.permute(1,0).numpy()]  # 统计出现次数最多的标签
-
                 pp = result['logits_lab'][0].argmax(-1)
                 p_label=pp.numpy()
-                #p_label = [Counter(p).most_common(1)[0][0] for p in pp.permute(1, 0).numpy()]  # 统计出现次数最多的标签
-                # preds_inc = torch.cat(
-                #     [
-                #         result["logits_lab"].unsqueeze(1).expand(-1,args.num_heads, -1, -1),
-                #         result["logits_unlab"],
-                #     ],
-                #     dim=-1,
-                # )
-                #preds = preds.max(dim=-1)[1]
-                # preds_inc = preds_inc.max(dim=-1)[1]
-                # preds_inc=preds_inc.permute((2,0,1))
-                # preds_inc=torch.reshape(preds_inc,(preds_inc.shape[0],-1))
-                #collections.Counter(preds_inc)
-                # pp=[Counter(p).most_common(1)[0][0] for p in preds_inc.numpy()]#统计出现次数最多的标签
-                # pp=np.array(pp)
-                # f=result['feats'].max(0)[0]
                 f=result['feats'][0]
-                # pfu = result['proj_feats_unlab'].max(0)[0].max(0)[0]
-                # cat_fea = torch.cat([f, pfu], dim=1).detach().numpy()
                 cat_fea=f.detach().numpy()
-                #
                 t=targets.numpy()
                 fea_total=np.concatenate([fea_total,cat_fea],axis=0)
                 tar_total=np.concatenate([tar_total,t],axis=0)
-
+                pre_total=np.concatenate([pre_total,p_label],axis=0)
                 print(float(np.equal(p_label, t).sum()) / args.batch_size)
 
-            np.savez(os.path.join(saveDir,'proj_numpy_ship_'+pretrain_comment), x=fea_total, y=tar_total)
+            np.savez(os.path.join(saveDir,'proj_numpy_ship_'+pretrain_comment), x_label=fea_total, y=tar_total,y_p=pre_total)
             # t_sne_projection(fea_total, tar_total)
 
             #keys: 'feats', 'logits_lab', 'logits_unlab', 'proj_feats_unlab', 'logits_unlab_over', 'proj_feats_unlab_over'
-
-    cat_fea_sub = np.empty((0, 512), np.float32)
-    cat_fea_target_sub = np.empty(0, np.int64)
-    for i,(val_datas,val_targets) in enumerate(valdataloaders):
-
-        #for i,(val_datas,val_targets) in enumerate(tqdm(valdataloader)):
-        result = model(val_datas)
-        # p_label = [Counter(p).most_common(1)[0][0] for p in pp.permute(1,0).numpy()]  # 统计出现次数最多的标签
-
-        pp = result['logits_lab'][0].argmax(-1)
-        p_label = pp.numpy()
-        f = result['feats']
-        # pfu = result['proj_feats_unlab'].max(0)[0].max(0)[0]
-        # cat_fea = torch.cat([f, pfu], dim=1).detach().numpy()
-        cat_fea = f.detach().numpy()
-        #
-        t = val_targets.numpy()
-        cat_fea_sub = np.concatenate([cat_fea_sub, cat_fea], axis=0)
-        cat_fea_target_sub = np.concatenate([cat_fea_target_sub, t], axis=0)
-
-        t = val_targets.numpy()
-        print(float(np.equal(p_label, t).sum()) / args.batch_size)
-    np.savez(os.path.join(saveDir,'proj_numpy_test_ship_'+pretrain_comment), x=cat_fea_sub, y=cat_fea_target_sub)
+    if True:#
+        print("pretrain: test set!")
+        cat_fea_sub = np.empty((0, 512), np.float32)
+        cat_fea_target_sub = np.empty(0, np.int64)
+        cat_fea_predict_sub = np.empty(0, np.int64)
+        for i,(val_datas,val_targets) in enumerate(valdataloaders):
+            result = model(val_datas)
+            # p_label = [Counter(p).most_common(1)[0][0] for p in pp.permute(1,0).numpy()]  # 统计出现次数最多的标签
+            pp=torch.softmax(result['logits_lab'], -1, torch.float32)
+            #hist(pp.detach().numpy())#确定阈值
+            cls_14_inds=torch.where(pp.max(-1)[0]<0.112)[0]
+            pp_argmax = pp.argmax(-1)
+            pp_argmax[cls_14_inds]=14
+            p_label = pp_argmax.numpy()
+            #p_label=result['logits_lab'].argmax(-1).numpy()
+            f = result['feats']
+            #hist()
+            cat_fea = f.detach().numpy()
+            t = val_targets.numpy()
+            cat_fea_sub = np.concatenate([cat_fea_sub, cat_fea], axis=0)
+            cat_fea_target_sub = np.concatenate([cat_fea_target_sub, t], axis=0)
+            cat_fea_predict_sub=np.concatenate([cat_fea_predict_sub,p_label],axis=0)
+            t = val_targets.numpy()
+            print(float(np.equal(p_label, t).sum()) / args.batch_size)
+        np.savez(os.path.join(saveDir,'proj_numpy_test_ship_'+pretrain_comment), x_label=cat_fea_sub, y=cat_fea_target_sub,y_p=cat_fea_predict_sub)
 
 if __name__ == "__main__":
     parser = pl.Trainer.add_argparse_args(parser)
     args = parser.parse_args()
     args.num_classes = args.num_labeled_classes + args.num_unlabeled_classes
     args.max_epochs=1
-    # main_discover(args)
+    main_discover(args)
     main_pretrain(args)
 
 #--dataset CIFAR10 --gpus 1 --precision 16 --max_epochs 30 --batch_size 256 --num_labeled_classes 5 --num_unlabeled_classes 5 --pretrained checkpoints/epoch=29-step=5849.ckpt --num_heads 4 --comment 5_5

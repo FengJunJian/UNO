@@ -30,7 +30,6 @@ CLASS_NAMES=['Boat',  # 0
 SHIP_ADVANCED_INDS=[14,0,1,2,3,4,5,7,8,9,10,11,12,13,6]
 
 def get_datamodule(args, mode):
-
     if mode == "pretrain":
         if args.dataset == "ship":
             return PretrainShipDataModule(args)
@@ -45,6 +44,9 @@ def get_datamodule(args, mode):
             return DiscoverImageNetDataModule(args)
         else:
             return DiscoverCIFARDataModule(args)
+    elif mode=="pretrainfull":
+        if args.dataset=="ship":
+            return PretrainShipDataModule_full(args)
 
 
 class PretrainCIFARDataModule(pl.LightningDataModule):
@@ -147,15 +149,19 @@ class PretrainShipDataModule(pl.LightningDataModule):
         # train dataset
         self.train_dataset = trainDataset
         if eval_falg:
-            self.train_dataset.dataset.transform = self.transform_train_supervised
+            self.train_dataset.dataset.transform = self.transform_val
         else:
             self.train_dataset.dataset.transform = self.transform_train
         subTarget=np.array(self.train_dataset.dataset.targets)[np.array(self.train_dataset.indices)]
         train_indices_lab = np.where(
             np.isin(subTarget, labeled_classes)
         )[0]
+        # train_indices_unlab = np.where(
+        #     np.isin(subTarget, range(self.num_labeled_classes,self.num_labeled_classes+self.num_unlabeled_classes))
+        # )[0]
         self.train_dataset = torch.utils.data.Subset(self.train_dataset, train_indices_lab)
-
+        # self.train_dataset.dataset.in
+        # self.train_dataset.dataset.dataset[i2[i1[0]]]
         # val datasets
         self.val_dataset = valDataset
         self.val_dataset.dataset.transform = self.transform_val
@@ -163,6 +169,74 @@ class PretrainShipDataModule(pl.LightningDataModule):
         subTarget = np.array(self.val_dataset.dataset.targets)[np.array(self.val_dataset.indices)]
         val_indices_lab = np.where(np.isin(subTarget, labeled_classes))[0]
         self.val_dataset = torch.utils.data.Subset(self.val_dataset, val_indices_lab)
+
+    def setup_test(self):
+        from copy import copy
+        #assert len(self.class_names)>self.num_labeled_classes
+
+        #labeled_classes = class_index#
+        labeled_classes=np.arange(self.num_labeled_classes)
+        #labeled_classes=self.labeled_advanced_inds[np.arange(self.num_labeled_classes)]
+
+        N = len(self.dataset)
+        train_size = int(N * 0.8)
+        val_size = N - train_size
+
+        trainDataset, valDataset = torch.utils.data.random_split(self.dataset,[train_size, val_size])
+        trainDataset.dataset=copy(self.dataset)
+        # train dataset
+        self.train_dataset = trainDataset
+        # if eval_falg:
+        #     self.train_dataset.dataset.transform = self.transform_train_supervised
+        # else:
+        # self.train_dataset.dataset.transform = self.transform_train
+        self.train_dataset.dataset.transform = self.transform_val  # self.transform_train
+
+        subTarget=np.array(self.train_dataset.dataset.targets)[np.array(self.train_dataset.indices)]
+        train_indices_lab = np.where(
+            np.isin(subTarget, labeled_classes)
+        )[0]
+        train_indices_unlab = np.where(
+            np.isin(subTarget, range(self.num_labeled_classes,self.num_labeled_classes+self.num_unlabeled_classes))
+        )[0]
+        self.train_dataset = torch.utils.data.Subset(self.train_dataset, train_indices_lab)
+        i1=self.train_dataset.indices
+        i2=self.train_dataset.dataset.indices
+
+        target=np.array(self.train_dataset.dataset.dataset.targets)
+        subT=target[np.array(i2)[np.array(i1)]]
+        # i=3
+        # print(self.train_dataset[i])
+        # print(self.train_dataset.dataset[i1[i]])
+        # print(self.train_dataset.dataset.dataset[i2[i1[i]]])
+        # self.train_dataset.dataset.dataset[i2[i1[0]]]
+        # val datasets
+        self.val_dataset = valDataset
+        self.val_dataset.dataset.transform = self.transform_val
+        # getattr(self.train_dataset.dataset,'dataset')
+        subTarget = np.array(self.val_dataset.dataset.targets)[np.array(self.val_dataset.indices)]
+        val_indices_lab = np.where(np.isin(subTarget, labeled_classes))[0]
+        self.val_dataset = torch.utils.data.Subset(self.val_dataset, val_indices_lab)
+
+    def setup_eval(self, eval_falg=False):
+        from copy import copy
+
+        N = len(self.dataset)
+        train_size = int(N * 0.8)
+        val_size = N - train_size
+
+        trainDataset, valDataset = torch.utils.data.random_split(self.dataset,[train_size, val_size])
+        trainDataset.dataset=copy(self.dataset)
+        # train dataset
+        self.train_dataset = trainDataset
+        #subT=np.array(self.train_dataset.dataset.targets)[np.array(self.train_dataset.indices)]
+        if eval_falg:
+            self.train_dataset.dataset.transform = self.transform_train_supervised
+        else:
+            self.train_dataset.dataset.transform = self.transform_train
+
+        self.val_dataset = valDataset
+        self.val_dataset.dataset.transform = self.transform_val
 
     def make_weights_for_balanced_classes(self,dataset, nclasses):
         import pickle as pkl
@@ -175,7 +249,6 @@ class PretrainShipDataModule(pl.LightningDataModule):
         cache_pkl_file = os.path.join(cache_pkl, cache_basename+'%d_%d.pkl'%(self.num_labeled_classes,self.num_unlabeled_classes))
         if not os.path.exists(cache_pkl):
             os.mkdir(cache_pkl)
-
         if os.path.exists(cache_pkl_file):
             with open(cache_pkl_file,'rb') as f:
                 weight_data=pkl.load(f)
@@ -190,17 +263,17 @@ class PretrainShipDataModule(pl.LightningDataModule):
             with open(cache_pkl_file,'wb') as f:
                 pkl.dump({'count':count,'val_list':val_list},f)
 
-            weight_per_class = [0.] * nclasses
-            N = float(sum(count))
-            for i in range(nclasses):
-                try:
-                    weight_per_class[i] = N / float(count[i])
-                except ZeroDivisionError as e:
-                    weight_per_class[i]=1.0
-                    print(e)
+        weight_per_class = [0.] * nclasses
+        N = float(sum(count))
+        for i in range(nclasses):
+            try:
+                weight_per_class[i] = N / float(count[i])
+            except ZeroDivisionError as e:
+                weight_per_class[i]=1.0
+                print(e)
 
-            for idx, val in enumerate(tqdm(val_list)):
-                weight[idx] = weight_per_class[val_list[idx]]
+        for idx, val in enumerate(tqdm(val_list)):
+            weight[idx] = weight_per_class[val_list[idx]]
 
         return weight
 
@@ -241,6 +314,76 @@ class PretrainShipDataModule(pl.LightningDataModule):
             prefetch_factor=2
         )
 
+class PretrainShipDataModule_full(PretrainShipDataModule):
+    def __init__(self, args):
+        super().__init__(args)
+        self.data_dir = args.data_dir
+        self.download = args.download
+        self.batch_size = args.batch_size
+        self.num_workers = args.num_workers
+        self.num_labeled_classes = args.num_labeled_classes
+        self.num_unlabeled_classes = args.num_unlabeled_classes
+        #self.dataset_class = getattr(torchvision.datasets, 'CIFAR10')
+        self.dataset= torchvision.datasets.ImageFolder(self.data_dir)#transform=transforms.ToTensor()
+        self.transform_train = get_transforms("unsupervised", args.dataset, args.num_views)
+        self.transform_train_supervised = get_transforms("supervised", args.dataset, args.num_views)
+        self.transform_val = get_transforms("eval", args.dataset, args.num_views)
+        self.class_names = CLASS_NAMES
+
+    def setup(self, stage=None,eval_falg=False):
+        from copy import copy
+
+        N = len(self.dataset)
+        train_size = int(N * 0.8)
+        val_size = N - train_size
+
+        trainDataset, valDataset = torch.utils.data.random_split(self.dataset,[train_size, val_size])
+        trainDataset.dataset=copy(self.dataset)
+        # train dataset
+        self.train_dataset = trainDataset
+        if eval_falg:
+            self.train_dataset.dataset.transform = self.transform_val
+        else:
+            self.train_dataset.dataset.transform = self.transform_train
+
+        self.val_dataset = valDataset
+        self.val_dataset.dataset.transform = self.transform_val
+
+    def train_dataloader(self,balanced=False):
+        if balanced:
+            weights = self.make_weights_for_balanced_classes(self.train_dataset, self.num_labeled_classes)
+            weights = torch.DoubleTensor(weights)
+            sampler = WeightedRandomSampler(weights, len(weights), replacement=True)
+            return DataLoader(
+                self.train_dataset,
+                batch_size=self.batch_size,
+                sampler=sampler,
+                #shuffle=True,
+                num_workers=self.num_workers,
+                pin_memory=True,
+                drop_last=True,
+                prefetch_factor=2)
+        else:
+            return DataLoader(
+                self.train_dataset,
+                batch_size=self.batch_size,
+                #sampler=sampler,
+                shuffle=True,
+                num_workers=self.num_workers,
+                pin_memory=True,
+                drop_last=True,
+                prefetch_factor=2)
+
+    def val_dataloader(self):
+        return DataLoader(
+            self.val_dataset,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            pin_memory=True,
+            drop_last=False,
+            prefetch_factor=2
+        )
 class DiscoverCIFARDataModule(pl.LightningDataModule):
     def __init__(self, args):
         super().__init__()
