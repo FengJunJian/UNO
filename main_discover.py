@@ -14,7 +14,6 @@ import numpy as np
 from argparse import ArgumentParser
 from datetime import datetime
 
-
 parser = ArgumentParser()
 parser.add_argument("--dataset", default="CIFAR100", type=str, help="dataset")
 parser.add_argument("--imagenet_split", default="A", type=str, help="imagenet split [A,B,C]")
@@ -46,7 +45,7 @@ parser.add_argument("--num_labeled_classes", default=80, type=int, help="number 
 parser.add_argument("--num_unlabeled_classes", default=20, type=int, help="number of unlab classes")
 #parser.add_argument("--pretrained", default='checkpoints/pretrain-resnet18-CIFAR100-Sep16_17-27-49.cp',type=str, help="pretrained checkpoint path")
 parser.add_argument("--pretrained", default='checkpoints/epoch=250-step=48944.ckpt',type=str, help="pretrained checkpoint path")
-#parser.add_argument("--gpus",default=1,type=int,help="number of gpus")
+
 
 class Discoverer(pl.LightningModule):
     def __init__(self, **kwargs):
@@ -268,7 +267,6 @@ def main(args):
     trainer = pl.Trainer.from_argparse_args(args, logger=wandb_logger)
     trainer.fit(model, dm)
     torch.save(model,'final_model.pth')
-
 
 if __name__ == "__main__":
     parser = pl.Trainer.add_argparse_args(parser)
